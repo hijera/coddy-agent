@@ -1,0 +1,396 @@
+//go:build http
+
+package httpserver
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"strings"
+
+	"github.com/EvilFreelancer/coddy-agent/internal/version"
+	"gopkg.in/yaml.v3"
+)
+
+// openAPISpec builds the OpenAPI 3 document for the Coddy HTTP gateway.
+// Keep this in sync with routes registered in New.
+func openAPISpec() map[string]interface{} {
+	ver := version.Get()
+	return map[string]interface{}{
+		"openapi": "3.0.3",
+		"info": map[string]interface{}{
+			"title":       "Coddy HTTP API",
+			"description": "OpenAI-compatible endpoints backed by Coddy sessions and agents. **`GET /v1/models`** returns session operating modes (**agent**, **plan**). The HTTP **model** field on completions can be a mode (`agent`, `plan`) or a **`models[].model`** selector from config; the backend LLM defaults follow **`agent.model`** and optional session overrides. Optional header **X-Coddy-Session-ID** continues an existing session; omit it to create one according to project docs.",
+			"version":     ver,
+		},
+		"servers": []interface{}{
+			map[string]interface{}{"url": "/", "description": "Server root (same host/port as coddy http)"},
+		},
+		"paths": map[string]interface{}{
+			"/v1/models": map[string]interface{}{
+				"get": map[string]interface{}{
+					"summary":     "List session modes",
+					"description": "Lists Coddy operating profiles **agent** and **plan** in OpenAI-compatible model objects (**id**: `agent`, `plan`). Not the YAML **`models`** table (LLM backends). Pick an LLM by passing a **`models[].model`** selector in **model** instead.",
+					"operationId": "listModels",
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "Model list",
+							"content": map[string]interface{}{
+								"application/json": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"$ref": "#/components/schemas/ModelList",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			"/v1/chat/completions": map[string]interface{}{
+				"post": map[string]interface{}{
+					"summary": "Create chat completion",
+					"description": "Chat completion in OpenAI-compatible shape. **`model`** must be **`agent`** or **`plan`** (sets session mode) or a **`models[].model`** value from configuration. " +
+						"When **stream** is true the response is **text/event-stream** (SSE chunks). Otherwise JSON. " +
+						"The last entry in **messages** must have role **user**.",
+					"operationId": "createChatCompletion",
+					"parameters": []interface{}{
+						map[string]interface{}{
+							"name": "X-Coddy-Session-ID", "in": "header", "required": false,
+							"schema": map[string]string{"type": "string"},
+							"description": "Existing session id. If absent, the server may create a new session.",
+						},
+					},
+					"requestBody": map[string]interface{}{
+						"required": true,
+						"content": map[string]interface{}{
+							"application/json": map[string]interface{}{
+								"schema": map[string]interface{}{
+									"$ref": "#/components/schemas/ChatCompletionRequest",
+								},
+							},
+						},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "Completion or streamed events",
+							"content": map[string]interface{}{
+								"application/json": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"$ref": "#/components/schemas/ChatCompletionResponse",
+									},
+								},
+								"text/event-stream": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"type":        "string",
+										"format":      "binary",
+										"description": "Server-Sent Events stream (OpenAI-compatible chunk lines).",
+									},
+								},
+							},
+						},
+						"400": errorResponseRef(),
+						"404": errorResponseRef(),
+						"500": errorResponseRef(),
+					},
+				},
+			},
+			"/v1/responses": map[string]interface{}{
+				"post": map[string]interface{}{
+					"summary":     "Create response (MVP)",
+					"description": "Simplified Responses-style call with **`model`** and **`input`** text. **`model`** is **`agent`**, **`plan`**, or a configured **`models[].model**` selector.",
+					"operationId": "createResponse",
+					"parameters": []interface{}{
+						map[string]interface{}{
+							"name": "X-Coddy-Session-ID", "in": "header", "required": false,
+							"schema": map[string]string{"type": "string"},
+							"description": "Existing session id. If absent, the server creates a session for this turn.",
+						},
+					},
+					"requestBody": map[string]interface{}{
+						"required": true,
+						"content": map[string]interface{}{
+							"application/json": map[string]interface{}{
+								"schema": map[string]interface{}{
+									"$ref": "#/components/schemas/ResponsesCreateRequest",
+								},
+							},
+						},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "Completed response payload",
+							"content": map[string]interface{}{
+								"application/json": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"$ref": "#/components/schemas/ResponsesCreateResponse",
+									},
+								},
+							},
+						},
+						"400": errorResponseRef(),
+						"404": errorResponseRef(),
+						"500": errorResponseRef(),
+					},
+				},
+			},
+			"/v1/responses/{id}": map[string]interface{}{
+				"get": map[string]interface{}{
+					"summary":     "Get response/session by id (MVP)",
+					"description": "Returns metadata when **id** is an active session id in this process.",
+					"operationId": "getResponse",
+					"parameters": []interface{}{
+						map[string]interface{}{
+							"name": "id", "in": "path", "required": true,
+							"schema": map[string]string{"type": "string"},
+							"description": "Session id (same as stored server-side for the conversation).",
+						},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "Response metadata",
+							"content": map[string]interface{}{
+								"application/json": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"$ref": "#/components/schemas/ResponsesGetResponse",
+									},
+								},
+							},
+						},
+						"404": errorResponseRef(),
+					},
+				},
+			},
+		},
+		"components": map[string]interface{}{
+			"schemas": map[string]interface{}{
+				"ErrorEnvelope": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"error": map[string]interface{}{
+							"type": "object",
+							"properties": map[string]interface{}{
+								"message": map[string]string{"type": "string"},
+							},
+						},
+					},
+				},
+				"ModelList": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"object": map[string]string{"type": "string", "example": "list"},
+						"data": map[string]interface{}{
+							"type": "array",
+							"items": map[string]interface{}{
+								"type": "object",
+								"properties": map[string]interface{}{
+									"id":        map[string]string{"type": "string"},
+									"object":    map[string]string{"type": "string", "example": "model"},
+									"created":   map[string]string{"type": "integer", "format": "int64"},
+									"owned_by":  map[string]string{"type": "string", "example": "coddy-mode"},
+								},
+							},
+						},
+					},
+				},
+				"OpenAIMessage": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"role": map[string]interface{}{
+							"type": "string",
+							"enum": []interface{}{"system", "user", "assistant", "tool"},
+						},
+						"content": map[string]interface{}{
+							"description": "JSON string or raw text/object per OpenAI client conventions.",
+							"oneOf": []interface{}{
+								map[string]string{"type": "string"},
+								map[string]interface{}{"type": "array"},
+								map[string]interface{}{"type": "object"},
+							},
+						},
+						"tool_call_id": map[string]string{"type": "string"},
+						"name":         map[string]string{"type": "string"},
+					},
+					"required": []string{"role"},
+				},
+				"ChatCompletionRequest": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"model": map[string]interface{}{
+							"type":        "string",
+							"description": "Session mode `agent` or `plan`, or a configured `models[].model` selector for the LLM backend.",
+						},
+						"messages": map[string]interface{}{
+							"type":  "array",
+							"items": map[string]interface{}{"$ref": "#/components/schemas/OpenAIMessage"},
+						},
+						"stream":      map[string]string{"type": "boolean"},
+						"max_tokens":  map[string]string{"type": "integer"},
+						"temperature": map[string]interface{}{"type": "number", "format": "float"},
+					},
+					"required": []string{"model", "messages"},
+				},
+				"ChatCompletionResponse": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"id":      map[string]string{"type": "string"},
+						"object":  map[string]string{"type": "string", "example": "chat.completion"},
+						"created": map[string]string{"type": "integer", "format": "int64"},
+						"model":   map[string]string{"type": "string"},
+						"choices": map[string]interface{}{
+							"type": "array",
+							"items": map[string]interface{}{
+								"type": "object",
+								"properties": map[string]interface{}{
+									"index": map[string]string{"type": "integer"},
+									"message": map[string]interface{}{
+										"type": "object",
+										"properties": map[string]interface{}{
+											"role":    map[string]string{"type": "string"},
+											"content": map[string]string{"type": "string"},
+										},
+									},
+									"finish_reason": map[string]string{"type": "string"},
+								},
+							},
+						},
+					},
+				},
+				"ResponsesCreateRequest": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"model": map[string]interface{}{
+							"type":        "string",
+							"description": "`agent`, `plan`, or a `models[].model` selector.",
+						},
+						"input": map[string]string{"type": "string"},
+					},
+					"required": []string{"model", "input"},
+				},
+				"ResponsesCreateResponse": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"id":     map[string]string{"type": "string"},
+						"object": map[string]string{"type": "string", "example": "response"},
+						"status": map[string]string{"type": "string", "example": "completed"},
+						"model":  map[string]string{"type": "string"},
+						"output": map[string]interface{}{
+							"type": "array",
+							"items": map[string]interface{}{
+								"type": "object",
+								"properties": map[string]interface{}{
+									"type": map[string]string{"type": "string", "example": "text"},
+									"text": map[string]string{"type": "string"},
+								},
+							},
+						},
+					},
+				},
+				"ResponsesGetResponse": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"id":     map[string]string{"type": "string"},
+						"object": map[string]string{"type": "string", "example": "response"},
+						"status": map[string]string{"type": "string", "example": "completed"},
+					},
+				},
+			},
+		},
+	}
+}
+
+func errorResponseRef() map[string]interface{} {
+	return map[string]interface{}{
+		"description": "Error",
+		"content": map[string]interface{}{
+			"application/json": map[string]interface{}{
+				"schema": map[string]interface{}{
+					"$ref": "#/components/schemas/ErrorEnvelope",
+				},
+			},
+		},
+	}
+}
+
+func encodeOpenAPIYAML() ([]byte, error) {
+	doc := openAPISpec()
+	data, err := yaml.Marshal(doc)
+	if err != nil {
+		return nil, err
+	}
+	return append(data, '\n'), nil
+}
+
+func (s *Server) handleOpenAPIYAML(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	data, err := encodeOpenAPIYAML()
+	if err != nil {
+		s.log.Error("openapi yaml", "error", err)
+		http.Error(w, "failed to build OpenAPI document", http.StatusInternalServerError)
+		return
+	}
+	// Inline + text-ish type so browsers show the document instead of forcing download (application/yaml often saves a file).
+	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
+	w.Header().Set("Content-Disposition", `inline; filename="openapi.yaml"`)
+	_, _ = w.Write(data)
+}
+
+func (s *Server) handleOpenAPIJSON(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(openAPISpec()); err != nil {
+		s.log.Error("openapi json", "error", err)
+		http.Error(w, "failed to build OpenAPI document", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Content-Disposition", `inline; filename="openapi.json"`)
+	_, _ = w.Write(buf.Bytes())
+}
+
+func swaggerUIHTML() string {
+	return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Coddy HTTP API - Swagger UI</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.11.10/swagger-ui.css" crossorigin />
+  <style>body{margin:0}#swagger-ui{max-width:100%}</style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5.11.10/swagger-ui-bundle.js" crossorigin></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5.11.10/swagger-ui-standalone-preset.js" crossorigin></script>
+  <script>
+    window.ui = SwaggerUIBundle({
+      url: '/openapi.yaml',
+      dom_id: '#swagger-ui',
+      presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+      layout: 'StandaloneLayout'
+    });
+  </script>
+</body>
+</html>
+`
+}
+
+func (s *Server) handleDocs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	path := strings.TrimSpace(r.URL.Path)
+	if path != "/docs" && path != "/docs/" {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(swaggerUIHTML()))
+}

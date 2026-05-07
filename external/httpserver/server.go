@@ -37,6 +37,11 @@ func New(cfg *config.Config, mgr *session.Manager, log *slog.Logger, defaultCWD 
 	s.mux.HandleFunc("POST /v1/chat/completions", s.handleChatCompletions)
 	s.mux.HandleFunc("POST /v1/responses", s.handleResponsesCreate)
 	s.mux.HandleFunc("GET /v1/responses/{id}", s.handleResponsesGetPath)
+	// Docs and generated OpenAPI - keep openapi.go openAPISpec in sync with handlers above.
+	s.mux.HandleFunc("GET /openapi.yaml", s.handleOpenAPIYAML)
+	s.mux.HandleFunc("GET /openapi.json", s.handleOpenAPIJSON)
+	s.mux.HandleFunc("GET /docs", s.handleDocs)
+	s.mux.HandleFunc("GET /docs/", s.handleDocs)
 	return s
 }
 
@@ -57,37 +62,62 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 		OwnedBy string `json:"owned_by"`
 	}
 	out := struct {
-		Object string      `json:"object"`
-		Data   []modelObj  `json:"data"`
+		Object string     `json:"object"`
+		Data   []modelObj `json:"data"`
 	}{
 		Object: "list",
-		Data:   make([]modelObj, 0, len(s.cfg.Models)),
+		Data:   nil,
 	}
-	for _, m := range s.cfg.Models {
+	// IDs are Coddy session profiles (modes), not YAML models[]. Same values as ACP session mode.
+	for _, mode := range []session.Mode{session.ModeAgent, session.ModePlan} {
 		out.Data = append(out.Data, modelObj{
-			ID:      m.Model,
+			ID:      string(mode),
 			Object:  "model",
 			Created: 0,
-			OwnedBy: "coddy",
+			OwnedBy: "coddy-mode",
 		})
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(out)
 }
 
+// isHTTPSessionMode reports whether sel selects session operating mode agent or plan (overload of HTTP model field).
+func isHTTPSessionMode(sel string) bool {
+	switch strings.TrimSpace(sel) {
+	case string(session.ModeAgent), string(session.ModePlan):
+		return true
+	default:
+		return false
+	}
+}
+
+// bindModelOrMode sets session mode, or validates and selects a YAML models[].model selector for LLM calls.
+func (s *Server) bindModelOrMode(st *session.State, sel string) error {
+	sel = strings.TrimSpace(sel)
+	if isHTTPSessionMode(sel) {
+		st.SetMode(sel)
+		return nil
+	}
+	if s.cfg.FindModelEntry(sel) == nil {
+		return errors.New("unknown model")
+	}
+	st.SetSelectedModelID(sel)
+	return nil
+}
+
 type chatCompletionRequest struct {
-	Model    string             `json:"model"`
-	Messages []openAIMessage    `json:"messages"`
-	Stream   bool               `json:"stream"`
-	MaxTok   int                `json:"max_tokens"`
-	Temp     float64            `json:"temperature"`
+	Model    string          `json:"model"`
+	Messages []openAIMessage `json:"messages"`
+	Stream   bool            `json:"stream"`
+	MaxTok   int             `json:"max_tokens"`
+	Temp     float64         `json:"temperature"`
 }
 
 type openAIMessage struct {
-	Role         string          `json:"role"`
-	Content      json.RawMessage `json:"content"`
-	ToolCallID   string          `json:"tool_call_id"`
-	Name         string          `json:"name"`
+	Role       string          `json:"role"`
+	Content    json.RawMessage `json:"content"`
+	ToolCallID string          `json:"tool_call_id"`
+	Name       string          `json:"name"`
 }
 
 func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
@@ -103,10 +133,6 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	model := strings.TrimSpace(req.Model)
 	if model == "" {
 		http.Error(w, `{"error":{"message":"model is required"}}`, http.StatusBadRequest)
-		return
-	}
-	if s.cfg.FindModelEntry(model) == nil {
-		http.Error(w, `{"error":{"message":"unknown model"}}`, http.StatusBadRequest)
 		return
 	}
 	msgs, err := openAIMessagesToLLM(req.Messages)
@@ -138,8 +164,11 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if createdNew {
 		w.Header().Set("X-Coddy-Session-ID", sessionID)
 	}
+	if err := s.bindModelOrMode(st, model); err != nil {
+		http.Error(w, `{"error":{"message":"unknown model"}}`, http.StatusBadRequest)
+		return
+	}
 	st.ReplaceMessagesWithoutPersist(prefix)
-	st.SetSelectedModelID(model)
 
 	prompt := []acp.ContentBlock{{Type: "text", Text: last.Content}}
 
@@ -287,7 +316,7 @@ func (s *Server) handleResponsesCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	model := strings.TrimSpace(body.Model)
-	if model == "" || s.cfg.FindModelEntry(model) == nil {
+	if model == "" {
 		http.Error(w, `{"error":{"message":"unknown or missing model"}}`, http.StatusBadRequest)
 		return
 	}
@@ -301,8 +330,11 @@ func (s *Server) handleResponsesCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":{"message":"session unavailable"}}`, http.StatusInternalServerError)
 		return
 	}
+	if err := s.bindModelOrMode(st, model); err != nil {
+		http.Error(w, `{"error":{"message":"unknown or missing model"}}`, http.StatusBadRequest)
+		return
+	}
 	st.ReplaceMessagesWithoutPersist(nil)
-	st.SetSelectedModelID(model)
 	bridge := NewSender(s.cfg, nil, false, model)
 	if _, err := s.mgr.HandleSessionPromptWithSender(ctx, acp.SessionPromptParams{
 		SessionID: sid,
@@ -313,10 +345,10 @@ func (s *Server) handleResponsesCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	text := lastAssistantContent(st)
 	out := map[string]interface{}{
-		"id":      sid,
-		"object":  "response",
-		"status":  "completed",
-		"model":   model,
+		"id":     sid,
+		"object": "response",
+		"status": "completed",
+		"model":  model,
 		"output": []map[string]string{{"type": "text", "text": text}},
 	}
 	w.Header().Set("Content-Type", "application/json")

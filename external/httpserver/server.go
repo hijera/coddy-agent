@@ -27,16 +27,41 @@ var errInvalidSessionHeader = errors.New("invalid X-Coddy-Session-ID")
 
 // Server serves OpenAI-compatible HTTP endpoints.
 type Server struct {
-	cfg        *config.Config
-	mgr        *session.Manager
-	log        *slog.Logger
-	defaultCWD string
-	mux        *http.ServeMux
+	cfg             *config.Config
+	mgr             *session.Manager
+	log             *slog.Logger
+	defaultCWD      string
+	mux             *http.ServeMux
+	providerFactory func(*config.Config) (llm.Provider, error)
 }
 
 // New creates an HTTP server wrapper (handlers registered on mux).
 func New(cfg *config.Config, mgr *session.Manager, log *slog.Logger, defaultCWD string) *Server {
-	s := &Server{cfg: cfg, mgr: mgr, log: log, defaultCWD: defaultCWD, mux: http.NewServeMux()}
+	s := &Server{
+		cfg:        cfg,
+		mgr:        mgr,
+		log:        log,
+		defaultCWD: defaultCWD,
+		mux:        http.NewServeMux(),
+		providerFactory: func(cfg *config.Config) (llm.Provider, error) {
+			if cfg == nil {
+				return nil, fmt.Errorf("config unavailable")
+			}
+			modelRef := strings.TrimSpace(cfg.Agent.Model)
+			if modelRef == "" {
+				return nil, fmt.Errorf("agent.model is empty")
+			}
+			rm, err := cfg.ResolveLLM(modelRef)
+			if err != nil {
+				return nil, err
+			}
+			maxTok := rm.MaxTokens
+			if maxTok <= 0 || maxTok > 96 {
+				maxTok = 96
+			}
+			return llm.NewProvider(rm.ProviderType, rm.Model, rm.APIKey, rm.BaseURL, maxTok, rm.Temperature)
+		},
+	}
 	s.mux.HandleFunc("GET /v1/models", s.handleModels)
 	s.mux.HandleFunc("POST /v1/chat/completions", s.handleChatCompletions)
 	s.mux.HandleFunc("POST /v1/responses", s.handleResponsesCreate)
@@ -74,11 +99,11 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	type modelObj struct {
-		ID      string `json:"id"`
-		Object  string `json:"object"`
-		Created int64  `json:"created"`
-		OwnedBy string `json:"owned_by"`
-		MaxContextTokens int `json:"max_context_tokens,omitempty"`
+		ID               string `json:"id"`
+		Object           string `json:"object"`
+		Created          int64  `json:"created"`
+		OwnedBy          string `json:"owned_by"`
+		MaxContextTokens int    `json:"max_context_tokens,omitempty"`
 	}
 	out := struct {
 		Object string     `json:"object"`
@@ -98,10 +123,10 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, mode := range []session.Mode{session.ModeAgent, session.ModePlan} {
 		out.Data = append(out.Data, modelObj{
-			ID:      string(mode),
-			Object:  "model",
-			Created: 0,
-			OwnedBy: "coddy-mode",
+			ID:               string(mode),
+			Object:           "model",
+			Created:          0,
+			OwnedBy:          "coddy-mode",
 			MaxContextTokens: maxCtx,
 		})
 	}

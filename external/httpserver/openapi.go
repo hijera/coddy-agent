@@ -55,7 +55,7 @@ func openAPISpec() map[string]interface{} {
 					"parameters": []interface{}{
 						map[string]interface{}{
 							"name": "X-Coddy-Session-ID", "in": "header", "required": false,
-							"schema": map[string]string{"type": "string"},
+							"schema":      map[string]string{"type": "string"},
 							"description": "Existing session id. If absent, the server may create a new session.",
 						},
 					},
@@ -101,7 +101,7 @@ func openAPISpec() map[string]interface{} {
 					"parameters": []interface{}{
 						map[string]interface{}{
 							"name": "X-Coddy-Session-ID", "in": "header", "required": false,
-							"schema": map[string]string{"type": "string"},
+							"schema":      map[string]string{"type": "string"},
 							"description": "Existing session id. If absent, the server creates a session for this turn.",
 						},
 					},
@@ -147,7 +147,7 @@ func openAPISpec() map[string]interface{} {
 					"parameters": []interface{}{
 						map[string]interface{}{
 							"name": "id", "in": "path", "required": true,
-							"schema": map[string]string{"type": "string"},
+							"schema":      map[string]string{"type": "string"},
 							"description": "Session id (same as stored server-side for the conversation).",
 						},
 					},
@@ -168,10 +168,51 @@ func openAPISpec() map[string]interface{} {
 			},
 			"/coddy/sessions": map[string]interface{}{
 				"get": map[string]interface{}{
-					"summary":  "List persisted chat sessions",
+					"summary":    "List persisted chat sessions",
 					"parameters": coddyPagingParams(),
 					"responses": map[string]interface{}{
 						"200": map[string]interface{}{"description": "Paged session identifiers"},
+						"503": errorResponseRef(),
+					},
+				},
+			},
+			"/coddy/describe": map[string]interface{}{
+				"post": map[string]interface{}{
+					"summary":     "Generate a short text description",
+					"description": "Accepts arbitrary text and returns a short phrase describing what it is about. If the input is 3 words or fewer, the response echoes them.",
+					"operationId": "coddyDescribe",
+					"requestBody": map[string]interface{}{
+						"required": true,
+						"content": map[string]interface{}{
+							"application/json": map[string]interface{}{
+								"schema": map[string]interface{}{
+									"type": "object",
+									"properties": map[string]interface{}{
+										"text": map[string]string{"type": "string"},
+									},
+									"required": []string{"text"},
+								},
+							},
+						},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "Description payload",
+							"content": map[string]interface{}{
+								"application/json": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"type": "object",
+										"properties": map[string]interface{}{
+											"object": map[string]string{"type": "string", "example": "coddy.describe"},
+											"short":  map[string]string{"type": "string"},
+										},
+										"required": []string{"object", "short"},
+									},
+								},
+							},
+						},
+						"400": errorResponseRef(),
+						"502": errorResponseRef(),
 						"503": errorResponseRef(),
 					},
 				},
@@ -212,10 +253,10 @@ func openAPISpec() map[string]interface{} {
 							"items": map[string]interface{}{
 								"type": "object",
 								"properties": map[string]interface{}{
-									"id":        map[string]string{"type": "string"},
-									"object":    map[string]string{"type": "string", "example": "model"},
-									"created":   map[string]string{"type": "integer", "format": "int64"},
-									"owned_by":  map[string]string{"type": "string", "example": "coddy-mode"},
+									"id":       map[string]string{"type": "string"},
+									"object":   map[string]string{"type": "string", "example": "model"},
+									"created":  map[string]string{"type": "integer", "format": "int64"},
+									"owned_by": map[string]string{"type": "string", "example": "coddy-mode"},
 								},
 							},
 						},

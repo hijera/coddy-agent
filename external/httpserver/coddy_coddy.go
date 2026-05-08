@@ -7,12 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
-	"net/url"
 
 	"github.com/EvilFreelancer/coddy-agent/internal/acp"
 	"github.com/EvilFreelancer/coddy-agent/internal/llm"
@@ -39,6 +39,7 @@ type pathsForMemoryAPI struct {
 
 func (s *Server) registerCoddyRoutes() {
 	s.mux.HandleFunc("GET /coddy/sessions", s.coddySessionsList)
+	s.mux.HandleFunc("POST /coddy/describe", s.coddyDescribePost)
 	s.mux.HandleFunc("GET /coddy/sessions/{id}/messages", s.coddySessionMessagesGet)
 	s.mux.HandleFunc("GET /coddy/sessions/{id}/tool-calls", s.coddyToolCallsList)
 	s.mux.HandleFunc("GET /coddy/sessions/{id}/tool-calls/{toolCallId}", s.coddyToolCallGet)
@@ -53,6 +54,74 @@ func (s *Server) registerCoddyRoutes() {
 	s.mux.HandleFunc("PUT /coddy/sessions/{id}/memory/file", s.coddyMemoryFilePut)
 	s.mux.HandleFunc("POST /coddy/sessions/{id}/memory/dir", s.coddyMemoryDirPost)
 	s.mux.HandleFunc("DELETE /coddy/sessions/{id}/memory/file", s.coddyMemoryFileDelete)
+}
+
+func (s *Server) coddyDescribePost(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.NotFound(w, r)
+		return
+	}
+
+	var body struct {
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, `{"error":{"message":"invalid JSON"}}`, http.StatusBadRequest)
+		return
+	}
+
+	raw := strings.TrimSpace(body.Text)
+	if raw == "" {
+		http.Error(w, `{"error":{"message":"text is required"}}`, http.StatusBadRequest)
+		return
+	}
+
+	words := strings.Fields(raw)
+	if len(words) <= 3 {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"object": "coddy.describe",
+			"short":  strings.Join(words, " "),
+		})
+		return
+	}
+
+	provider, err := s.providerFactory(s.cfg)
+	if err != nil {
+		s.log.Error("describe provider", "error", err)
+		http.Error(w, `{"error":{"message":"LLM unavailable"}}`, http.StatusServiceUnavailable)
+		return
+	}
+
+	ctx := r.Context()
+	resp, err := provider.Complete(ctx, []llm.Message{
+		{
+			Role: llm.RoleSystem,
+			Content: "You generate short descriptions for chat titles and command labels. " +
+				"Return a single short phrase (3-8 words) describing what the user's text is about. " +
+				"No quotes. No trailing period. Output only the phrase.",
+		},
+		{Role: llm.RoleUser, Content: raw},
+	}, nil)
+	if err != nil {
+		s.log.Error("describe llm", "error", err)
+		http.Error(w, `{"error":{"message":"LLM error"}}`, http.StatusBadGateway)
+		return
+	}
+
+	short := strings.TrimSpace(resp.Content)
+	if i := strings.IndexByte(short, '\n'); i >= 0 {
+		short = strings.TrimSpace(short[:i])
+	}
+	if short == "" {
+		short = strings.Join(words[:3], " ")
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"object": "coddy.describe",
+		"short":  short,
+	})
 }
 
 type coddyToolCallRow struct {
@@ -374,10 +443,10 @@ func (s *Server) coddySessionsList(w http.ResponseWriter, r *http.Request) {
 	start := offset
 	if start >= len(rows) {
 		out := map[string]interface{}{
-			"object":       "coddy.session_list",
-			"sessions":     []interface{}{},
-			"nextCursor":   nil,
-			"hasMore":      false,
+			"object":     "coddy.session_list",
+			"sessions":   []interface{}{},
+			"nextCursor": nil,
+			"hasMore":    false,
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(out)
@@ -461,9 +530,9 @@ func (s *Server) coddySessionMessagesGet(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	out := map[string]interface{}{
-		"object":   "coddy.messages",
+		"object":    "coddy.messages",
 		"sessionId": id,
-		"messages": llmMsgsToCoddyOpenAI(st.GetMessages()),
+		"messages":  llmMsgsToCoddyOpenAI(st.GetMessages()),
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(out)
@@ -720,10 +789,10 @@ func (s *Server) coddyMemoryTree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	type node struct {
-		Name     string    `json:"name"`
-		Kind     string    `json:"kind"`
-		Size     int64     `json:"size,omitempty"`
-		Modified string    `json:"modified,omitempty"`
+		Name     string `json:"name"`
+		Kind     string `json:"kind"`
+		Size     int64  `json:"size,omitempty"`
+		Modified string `json:"modified,omitempty"`
 	}
 	nodes := make([]node, 0)
 	for _, e := range de {
@@ -809,9 +878,9 @@ func (s *Server) coddyMemoryFileGet(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"object": "coddy.memory_file",
-		"root":   root,
-		"path":   filepath.ToSlash(relPath),
+		"object":  "coddy.memory_file",
+		"root":    root,
+		"path":    filepath.ToSlash(relPath),
 		"content": string(b),
 	})
 }

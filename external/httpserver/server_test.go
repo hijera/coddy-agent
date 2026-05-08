@@ -35,7 +35,9 @@ func TestGETModels(t *testing.T) {
 	cfg := &config.Config{
 		Models: []config.ModelEntry{{Model: "openai/gpt-4o", MaxTokens: 100, Temperature: 0.2}},
 	}
-	runner := func(context.Context, *session.State, []acp.ContentBlock, acp.UpdateSender) (string, error) { return "", nil }
+	runner := func(context.Context, *session.State, []acp.ContentBlock, acp.UpdateSender) (string, error) {
+		return "", nil
+	}
 	mgr := session.NewManager(cfg, noopSender{}, runner, slog.Default(), "/tmp", nil)
 	srv := New(cfg, mgr, slog.Default(), "/tmp")
 
@@ -53,10 +55,10 @@ func TestGETModels(t *testing.T) {
 	var body struct {
 		Object string `json:"object"`
 		Data   []struct {
-			ID      string `json:"id"`
-			Object  string `json:"object"`
-			OwnedBy string `json:"owned_by"`
-			MaxContextTokens int `json:"max_context_tokens"`
+			ID               string `json:"id"`
+			Object           string `json:"object"`
+			OwnedBy          string `json:"owned_by"`
+			MaxContextTokens int    `json:"max_context_tokens"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
@@ -99,10 +101,84 @@ func TestOpenAPISpecPathsAndVersion(t *testing.T) {
 	if !ok {
 		t.Fatal("missing paths map")
 	}
-	for _, must := range []string{"/v1/models", "/v1/chat/completions", "/v1/responses", "/v1/responses/{id}", "/coddy/sessions", "/coddy/sessions/{id}/messages"} {
+	for _, must := range []string{"/v1/models", "/v1/chat/completions", "/v1/responses", "/v1/responses/{id}", "/coddy/sessions", "/coddy/describe", "/coddy/sessions/{id}/messages"} {
 		if _, ok := paths[must]; !ok {
 			t.Fatalf("paths missing key %s", must)
 		}
+	}
+}
+
+type fakeProvider struct {
+	reply string
+}
+
+func (p fakeProvider) Complete(context.Context, []llm.Message, []llm.ToolDefinition) (*llm.Response, error) {
+	return &llm.Response{Content: p.reply, StopReason: "end_turn"}, nil
+}
+
+func (p fakeProvider) Stream(context.Context, []llm.Message, []llm.ToolDefinition, func(llm.StreamChunk)) (*llm.Response, error) {
+	return &llm.Response{Content: p.reply, StopReason: "end_turn"}, nil
+}
+
+func TestCoddyDescribeEchoesShortCommand(t *testing.T) {
+	_, srv := testHTTPServerPersist(t)
+	srv.providerFactory = func(*config.Config) (llm.Provider, error) {
+		return fakeProvider{reply: "should not be used"}, nil
+	}
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	res, err := http.Post(ts.URL+"/coddy/describe", "application/json", strings.NewReader(`{"text":"git status"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := ioReadAllClose(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status %d body %s", res.StatusCode, b)
+	}
+	var out struct {
+		Object string `json:"object"`
+		Short  string `json:"short"`
+	}
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Object != "coddy.describe" || out.Short != "git status" {
+		t.Fatalf("unexpected %+v", out)
+	}
+}
+
+func TestCoddyDescribeUsesProviderForLongText(t *testing.T) {
+	_, srv := testHTTPServerPersist(t)
+	srv.providerFactory = func(*config.Config) (llm.Provider, error) {
+		return fakeProvider{reply: "Refactor memory API"}, nil
+	}
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	res, err := http.Post(ts.URL+"/coddy/describe", "application/json", strings.NewReader(`{"text":"Please refactor the memory tree endpoint to reject traversal and add tests."}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := ioReadAllClose(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status %d body %s", res.StatusCode, b)
+	}
+	var out struct {
+		Object string `json:"object"`
+		Short  string `json:"short"`
+	}
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Object != "coddy.describe" || out.Short != "Refactor memory API" {
+		t.Fatalf("unexpected %+v", out)
 	}
 }
 

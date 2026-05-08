@@ -63,6 +63,7 @@ export function App() {
   const [items, setItems] = useState<TranscriptItem[]>([]);
   const [draft, setDraft] = useState('');
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
 
   const headers = useMemo(() => ({ [HDR]: sessionId }), [sessionId]);
 
@@ -86,7 +87,7 @@ export function App() {
     return () => window.removeEventListener('hashchange', onHash);
   }, [sessionId]);
 
-  async function loadSessions(reset: boolean) {
+  async function loadSessions(reset: boolean): Promise<SessionRow[] | null> {
     const ps = new URLSearchParams();
     ps.set('limit', '30');
     if (!reset && sessionsCursor) {
@@ -96,7 +97,7 @@ export function App() {
       headers,
     });
     if (!res.ok || !res.data) {
-      return;
+      return null;
     }
     const next = res.data.sessions || [];
     setSessions((prev) => {
@@ -107,6 +108,7 @@ export function App() {
       return [...prev, ...next.filter((s) => !seen.has(s.id))];
     });
     setSessionsCursor(res.data.nextCursor ?? null);
+    return next;
   }
 
   async function loadMessages() {
@@ -134,6 +136,7 @@ export function App() {
   async function pickSession(id: string) {
     setSessionHash(id);
     setSessionId(id);
+    setSessionsOpen(false);
   }
 
   async function renameSession(id: string) {
@@ -172,8 +175,15 @@ export function App() {
       return;
     }
     setTokenUsage(null);
-    void loadSessions(true);
-    void loadMessages();
+    void (async () => {
+      const list = await loadSessions(true);
+      const exists = !!list?.some((s) => s.id === sessionId);
+      if (exists) {
+        await loadMessages();
+      } else {
+        setItems([]);
+      }
+    })();
   }, [sessionId]);
 
   function upsertToolCall(update: Partial<Extract<TranscriptItem, { type: 'tool_call' }>> & { toolCallId: string }) {
@@ -325,10 +335,24 @@ export function App() {
 
   return (
     <div className="shell">
-      <NavRail onNewChat={() => pickSession(randomSessionId())} />
+      <NavRail
+        onNewChat={() => pickSession(randomSessionId())}
+        menuOpen={sessionsOpen}
+        onToggleMenu={() => setSessionsOpen((v) => !v)}
+      />
+
+      <div
+        className={`backdrop ${sessionsOpen ? 'is-open' : ''}`}
+        onClick={() => setSessionsOpen(false)}
+        aria-hidden={!sessionsOpen}
+      />
+
       <SessionsSidebar
         sessionId={sessionId}
         sessions={sessions}
+        variant="drawer"
+        open={sessionsOpen}
+        onClose={() => setSessionsOpen(false)}
         onPick={pickSession}
         onRename={(id: string) => void renameSession(id)}
         onDelete={(id: string) => void deleteSession(id)}

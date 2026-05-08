@@ -21,6 +21,7 @@ rpa-agent
 # Go build cache
 /vendor/
 __pycache__/
+/*.png
 
 # Config with secrets (use config.example.yaml as template)
 config.yaml
@@ -42,5 +43,7 @@ Thumbs.db
 
 # UI dev
 /external/ui/node_modules/
+/external/ui/src/node_modules/
 /external/ui/dist/
 /external/ui/app.js.map
+.playwright-mcp/

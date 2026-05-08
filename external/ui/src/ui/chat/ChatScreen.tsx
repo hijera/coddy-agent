@@ -24,24 +24,26 @@ export function ChatScreen(props: {
 
   return (
     <main className={`main ${isEmpty ? 'is-empty' : ''}`}>
-      <ChatHeader title={props.title} />
+      {isEmpty ? null : <ChatHeader title={props.title} />}
 
-      <div className="hero" id="hero" hidden={!isEmpty}>
-        <h1 className="hero-title">What do you want to know?</h1>
-      </div>
+      {isEmpty ? (
+        <div className="hero" id="hero">
+          <h1 className="hero-title">What do you want to know?</h1>
+          <div className="hero-composer">
+            <Composer value={props.draft} isEmpty={true} onChange={props.onDraftChange} onSend={props.onSend} />
+          </div>
+        </div>
+      ) : (
+        <>
+          <div id="messages" className="messages" aria-live="polite" ref={messagesRef}>
+            <MessageList items={props.items} />
+          </div>
 
-      <div id="messages" className="messages" aria-live="polite" ref={messagesRef}>
-        <MessageList items={props.items} />
-      </div>
+          <TokenBar usage={props.tokenUsage} />
 
-      <TokenBar usage={props.tokenUsage} />
-
-      <Composer
-        value={props.draft}
-        isEmpty={isEmpty}
-        onChange={props.onDraftChange}
-        onSend={props.onSend}
-      />
+          <Composer value={props.draft} isEmpty={false} onChange={props.onDraftChange} onSend={props.onSend} />
+        </>
+      )}
     </main>
   );
 }

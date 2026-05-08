@@ -1,0 +1,1090 @@
+//go:build http
+
+package httpserver
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/EvilFreelancer/coddy-agent/internal/acp"
+	"github.com/EvilFreelancer/coddy-agent/internal/llm"
+	"github.com/EvilFreelancer/coddy-agent/internal/session"
+	"github.com/EvilFreelancer/coddy-agent/internal/tools/todo"
+)
+
+var errTraversal = errors.New("path escapes allowed root")
+
+func describeFallbackTitle(words []string) string {
+	if len(words) == 0 {
+		return ""
+	}
+	n := min(8, len(words))
+	return strings.Join(words[:n], " ")
+}
+
+func describeClampWords(s string, maxWords int) string {
+	w := strings.Fields(s)
+	if len(w) <= maxWords {
+		return strings.Join(w, " ")
+	}
+	return strings.Join(w[:maxWords], " ")
+}
+
+func describeStripLineNoise(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "- ")
+	s = strings.TrimPrefix(s, "* ")
+	s = strings.Trim(s, `"'“”„`)
+	for strings.HasPrefix(s, "**") {
+		s = strings.TrimPrefix(s, "**")
+		if i := strings.Index(s, "**"); i >= 0 {
+			s = strings.TrimSpace(s[:i] + s[i+2:])
+		} else {
+			break
+		}
+	}
+	return strings.TrimSpace(s)
+}
+
+// describePickPhraseFromLLM picks a usable title from model output. Some models emit a junk first line (e.g. "Po") then the real phrase.
+func describePickPhraseFromLLM(llmRaw string, userWords []string) string {
+	trimmed := strings.TrimSpace(llmRaw)
+	if trimmed == "" {
+		return describeFallbackTitle(userWords)
+	}
+	type scored struct {
+		text  string
+		words int
+		chars int
+	}
+	var cands []scored
+	for _, line := range strings.Split(trimmed, "\n") {
+		part := describeStripLineNoise(line)
+		if part == "" {
+			continue
+		}
+		fw := strings.Fields(part)
+		if len(fw) == 0 {
+			continue
+		}
+		joined := strings.Join(fw, " ")
+		cands = append(cands, scored{
+			text:  joined,
+			words: len(fw),
+			chars: utf8.RuneCountInString(joined),
+		})
+	}
+	bestText := ""
+	bestScore := 0
+	substantial := func(c scored) bool {
+		if c.words >= 3 {
+			return true
+		}
+		return c.words >= 2 && c.chars >= 12
+	}
+	for _, c := range cands {
+		if !substantial(c) {
+			continue
+		}
+		score := c.words*120 + min(c.chars, 140)
+		if score > bestScore {
+			bestScore = score
+			bestText = c.text
+		}
+	}
+	if bestText == "" && len(cands) > 0 {
+		longest := ""
+		for _, c := range cands {
+			if c.chars > utf8.RuneCountInString(longest) {
+				longest = c.text
+			}
+		}
+		if utf8.RuneCountInString(longest) >= 8 {
+			bestText = longest
+		}
+	}
+	if bestText == "" || utf8.RuneCountInString(bestText) < 4 {
+		return describeFallbackTitle(userWords)
+	}
+	return describeClampWords(bestText, 12)
+}
+
+func (s *Server) coddyPaths() pathsForMemoryAPI {
+	dir := strings.TrimSpace(s.cfg.Memory.Dir)
+	var globalRoot string
+	if dir != "" {
+		globalRoot = filepath.Clean(dir)
+	} else if h := strings.TrimSpace(s.cfg.Paths.Home); h != "" {
+		globalRoot = filepath.Join(h, "memory")
+	}
+	return pathsForMemoryAPI{globalMemoryRoot: globalRoot}
+}
+
+type pathsForMemoryAPI struct {
+	globalMemoryRoot string
+}
+
+func (s *Server) registerCoddyRoutes() {
+	s.mux.HandleFunc("GET /coddy/sessions", s.coddySessionsList)
+	s.mux.HandleFunc("POST /coddy/describe", s.coddyDescribePost)
+	s.mux.HandleFunc("GET /coddy/sessions/{id}/messages", s.coddySessionMessagesGet)
+	s.mux.HandleFunc("GET /coddy/sessions/{id}/tool-calls", s.coddyToolCallsList)
+	s.mux.HandleFunc("GET /coddy/sessions/{id}/tool-calls/{toolCallId}", s.coddyToolCallGet)
+	s.mux.HandleFunc("GET /coddy/sessions/{id}/stats", s.coddySessionStatsGet)
+	s.mux.HandleFunc("PATCH /coddy/sessions/{id}", s.coddySessionPatch)
+	s.mux.HandleFunc("DELETE /coddy/sessions/{id}", s.coddySessionDelete)
+	s.mux.HandleFunc("GET /coddy/sessions/{id}/plan", s.coddyPlanGet)
+	s.mux.HandleFunc("PUT /coddy/sessions/{id}/plan", s.coddyPlanPut)
+	s.mux.HandleFunc("POST /coddy/sessions/{id}/plan/archive", s.coddyPlanArchivePost)
+	s.mux.HandleFunc("GET /coddy/sessions/{id}/memory/tree", s.coddyMemoryTree)
+	s.mux.HandleFunc("GET /coddy/sessions/{id}/memory/file", s.coddyMemoryFileGet)
+	s.mux.HandleFunc("PUT /coddy/sessions/{id}/memory/file", s.coddyMemoryFilePut)
+	s.mux.HandleFunc("POST /coddy/sessions/{id}/memory/dir", s.coddyMemoryDirPost)
+	s.mux.HandleFunc("DELETE /coddy/sessions/{id}/memory/file", s.coddyMemoryFileDelete)
+}
+
+func (s *Server) coddyDescribePost(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.NotFound(w, r)
+		return
+	}
+
+	var body struct {
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, `{"error":{"message":"invalid JSON"}}`, http.StatusBadRequest)
+		return
+	}
+
+	raw := strings.TrimSpace(body.Text)
+	if raw == "" {
+		http.Error(w, `{"error":{"message":"text is required"}}`, http.StatusBadRequest)
+		return
+	}
+
+	words := strings.Fields(raw)
+	if len(words) <= 3 {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"object": "coddy.describe",
+			"short":  strings.Join(words, " "),
+		})
+		return
+	}
+
+	provider, err := s.providerFactory(s.cfg)
+	if err != nil {
+		s.log.Error("describe provider", "error", err)
+		http.Error(w, `{"error":{"message":"LLM unavailable"}}`, http.StatusServiceUnavailable)
+		return
+	}
+
+	ctx := r.Context()
+	resp, err := provider.Complete(ctx, []llm.Message{
+		{
+			Role: llm.RoleSystem,
+			Content: "You generate short descriptions for chat titles and command labels. " +
+				"Return exactly one short phrase (3 to 8 words) describing what the user's text is about. " +
+				"Match the user's language when possible. " +
+				"No quotes, no preamble, no headings, no line breaks, no numbering. Output only the phrase.",
+		},
+		{Role: llm.RoleUser, Content: raw},
+	}, nil)
+	if err != nil {
+		s.log.Error("describe llm", "error", err)
+		http.Error(w, `{"error":{"message":"LLM error"}}`, http.StatusBadGateway)
+		return
+	}
+
+	short := describePickPhraseFromLLM(resp.Content, words)
+	if short == "" {
+		short = strings.Join(words[:min(3, len(words))], " ")
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"object": "coddy.describe",
+		"short":  short,
+	})
+}
+
+type coddyToolCallRow struct {
+	ToolCallID    string `json:"toolCallId"`
+	Name          string `json:"name,omitempty"`
+	Kind          string `json:"kind,omitempty"`
+	Status        string `json:"status,omitempty"`
+	StartedAt     string `json:"startedAt,omitempty"`
+	FinishedAt    string `json:"finishedAt,omitempty"`
+	ArgsPreview   string `json:"argsPreview,omitempty"`
+	ResultPreview string `json:"resultPreview,omitempty"`
+}
+
+func previewText(s string, max int) string {
+	txt := strings.TrimSpace(s)
+	if txt == "" {
+		return ""
+	}
+	if max <= 0 || len(txt) <= max {
+		return txt
+	}
+	return txt[:max] + "..."
+}
+
+func toolKind(name string) string {
+	n := strings.TrimSpace(strings.ToLower(name))
+	if n == "" {
+		return "tool"
+	}
+	if strings.HasPrefix(n, "coddy_todo_") {
+		return "todo"
+	}
+	switch n {
+	case "run_command":
+		return "shell"
+	case "write_file", "apply_diff", "mkdir", "touch", "mv":
+		return "fs"
+	}
+	return "tool"
+}
+
+func (s *Server) coddyToolCallsList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	st := s.coddyEnsureLoaded(w, r, id)
+	if st == nil {
+		return
+	}
+	sd := strings.TrimSpace(st.GetPersistedSessionDir())
+	msgs := st.GetMessages()
+
+	type ent struct {
+		row coddyToolCallRow
+	}
+	ordered := make([]ent, 0)
+	idx := map[string]int{}
+
+	for _, m := range msgs {
+		if m.Role == llm.RoleAssistant && len(m.ToolCalls) > 0 {
+			for _, tc := range m.ToolCalls {
+				if strings.TrimSpace(tc.ID) == "" {
+					continue
+				}
+				if _, ok := idx[tc.ID]; ok {
+					continue
+				}
+				idx[tc.ID] = len(ordered)
+				ordered = append(ordered, ent{
+					row: coddyToolCallRow{
+						ToolCallID:  tc.ID,
+						Name:        tc.Name,
+						Kind:        toolKind(tc.Name),
+						Status:      "pending",
+						ArgsPreview: previewText(tc.InputJSON, 200),
+					},
+				})
+			}
+		}
+		if m.Role == llm.RoleTool && strings.TrimSpace(m.ToolCallID) != "" {
+			i, ok := idx[m.ToolCallID]
+			if !ok {
+				idx[m.ToolCallID] = len(ordered)
+				ordered = append(ordered, ent{row: coddyToolCallRow{ToolCallID: m.ToolCallID}})
+				i = idx[m.ToolCallID]
+			}
+			ordered[i].row.Status = "completed"
+			ordered[i].row.ResultPreview = previewText(m.Content, 200)
+		}
+	}
+
+	if sd != "" {
+		for i := range ordered {
+			id := ordered[i].row.ToolCallID
+			if meta, err := session.ReadToolCallMeta(sd, id); err == nil && meta != nil {
+				if strings.TrimSpace(meta.Name) != "" {
+					ordered[i].row.Name = meta.Name
+				}
+				if strings.TrimSpace(meta.Kind) != "" {
+					ordered[i].row.Kind = meta.Kind
+				}
+				if strings.TrimSpace(meta.Status) != "" {
+					ordered[i].row.Status = meta.Status
+				}
+				ordered[i].row.StartedAt = meta.StartedAt
+				ordered[i].row.FinishedAt = meta.FinishedAt
+			}
+			if args, err := session.ReadToolCallArgs(sd, id); err == nil {
+				ordered[i].row.ArgsPreview = previewText(args, 200)
+			}
+			if res, err := session.ReadToolCallResult(sd, id); err == nil {
+				ordered[i].row.ResultPreview = previewText(res, 200)
+			}
+		}
+	}
+
+	outRows := make([]coddyToolCallRow, 0, len(ordered))
+	for _, e := range ordered {
+		outRows = append(outRows, e.row)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"object":    "coddy.tool_calls",
+		"sessionId": id,
+		"toolCalls": outRows,
+	})
+}
+
+func (s *Server) coddyToolCallGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	toolCallID := strings.TrimSpace(r.PathValue("toolCallId"))
+	st := s.coddyEnsureLoaded(w, r, id)
+	if st == nil {
+		return
+	}
+	sd := strings.TrimSpace(st.GetPersistedSessionDir())
+
+	var meta *session.ToolCallMeta
+	var args, result string
+
+	if sd != "" {
+		if m, err := session.ReadToolCallMeta(sd, toolCallID); err == nil {
+			meta = m
+		}
+		if a, err := session.ReadToolCallArgs(sd, toolCallID); err == nil {
+			args = a
+		}
+		if res, err := session.ReadToolCallResult(sd, toolCallID); err == nil {
+			result = res
+		}
+	}
+
+	if meta == nil || (args == "" && result == "") {
+		for _, m := range st.GetMessages() {
+			if m.Role == llm.RoleAssistant {
+				for _, tc := range m.ToolCalls {
+					if tc.ID == toolCallID {
+						if meta == nil {
+							tmp := session.ToolCallMeta{
+								ToolCallID: toolCallID,
+								Name:       tc.Name,
+								Kind:       toolKind(tc.Name),
+								Status:     "pending",
+							}
+							meta = &tmp
+						}
+						if args == "" {
+							args = tc.InputJSON
+						}
+					}
+				}
+			}
+			if m.Role == llm.RoleTool && m.ToolCallID == toolCallID {
+				if result == "" {
+					result = m.Content
+				}
+				if meta != nil && meta.Status == "pending" {
+					meta.Status = "completed"
+				}
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"object":     "coddy.tool_call",
+		"sessionId":  id,
+		"toolCallId": toolCallID,
+		"meta":       meta,
+		"args":       args,
+		"result":     result,
+	})
+}
+
+func (s *Server) coddySessionStatsGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	st := s.coddyEnsureLoaded(w, r, id)
+	if st == nil {
+		return
+	}
+	sd := strings.TrimSpace(st.GetPersistedSessionDir())
+	if sd == "" {
+		http.Error(w, `{"error":{"message":"stats unavailable"}}`, http.StatusServiceUnavailable)
+		return
+	}
+	stats, err := session.ReadSessionStats(sd)
+	if err != nil {
+		if os.IsNotExist(err) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"object":    "coddy.session_stats",
+				"sessionId": id,
+				"stats":     nil,
+			})
+			return
+		}
+		http.Error(w, `{"error":{"message":"read failed"}}`, http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"object":    "coddy.session_stats",
+		"sessionId": id,
+		"stats":     stats,
+	})
+}
+
+func (s *Server) coddyRequireStore(w http.ResponseWriter) *session.FileStore {
+	fs := s.mgr.FileStore()
+	if fs == nil || fs.Root == "" {
+		http.Error(w, `{"error":{"message":"session store unavailable"}}`, http.StatusServiceUnavailable)
+		return nil
+	}
+	return fs
+}
+
+func coddyMustSession(w http.ResponseWriter, s *session.Manager, id string, loadFromDisk func() (*session.State, error)) *session.State {
+	if err := session.ValidateFolderSessionID(id); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":{"message":%q}}`, err.Error()), http.StatusBadRequest)
+		return nil
+	}
+	if st := s.SessionByID(id); st != nil {
+		return st
+	}
+	st, err := loadFromDisk()
+	if err != nil {
+		http.Error(w, `{"error":{"message":"session not found"}}`, http.StatusNotFound)
+		return nil
+	}
+	return st
+}
+
+func (s *Server) coddyEnsureLoaded(w http.ResponseWriter, r *http.Request, id string) *session.State {
+	fs := s.coddyRequireStore(w)
+	if fs == nil {
+		return nil
+	}
+	load := func() (*session.State, error) {
+		if !fs.HasPersistedSnapshot(id) {
+			return nil, errSessionNotFound
+		}
+		_, err := s.mgr.HandleSessionLoad(r.Context(), acp.SessionLoadParams{
+			SessionID: id,
+			CWD:       s.defaultCWD,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return s.mgr.SessionByID(id), nil
+	}
+	return coddyMustSession(w, s.mgr, id, load)
+}
+
+func parseLimitCursor(q url.Values) (limit, offset int) {
+	limit = 50
+	if v := strings.TrimSpace(q.Get("limit")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if v := strings.TrimSpace(q.Get("cursor")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+	return limit, offset
+}
+
+func (s *Server) coddySessionsList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	fs := s.coddyRequireStore(w)
+	if fs == nil {
+		return
+	}
+	rows, err := fs.ListSnapshots("")
+	if err != nil {
+		s.log.Error("coddy sessions list", "error", err)
+		http.Error(w, `{"error":{"message":"list failed"}}`, http.StatusInternalServerError)
+		return
+	}
+	limit, offset := parseLimitCursor(r.URL.Query())
+	start := offset
+	if start >= len(rows) {
+		out := map[string]interface{}{
+			"object":     "coddy.session_list",
+			"sessions":   []interface{}{},
+			"nextCursor": nil,
+			"hasMore":    false,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(out)
+		return
+	}
+	end := start + limit
+	if end > len(rows) {
+		end = len(rows)
+	}
+	slice := rows[start:end]
+	sessions := make([]map[string]string, 0, len(slice))
+	for _, row := range slice {
+		ent := map[string]string{
+			"id": row.SessionID,
+		}
+		if row.Title != "" {
+			ent["title"] = row.Title
+		}
+		if row.UpdatedAt != "" {
+			ent["updatedAt"] = row.UpdatedAt
+		}
+		if row.CWD != "" {
+			ent["cwd"] = row.CWD
+		}
+		sessions = append(sessions, ent)
+	}
+	var nextCursor interface{}
+	if end < len(rows) {
+		nextCursor = strconv.Itoa(end)
+	}
+	out := map[string]interface{}{
+		"object":     "coddy.session_list",
+		"sessions":   sessions,
+		"nextCursor": nextCursor,
+		"hasMore":    end < len(rows),
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+func llmMsgsToCoddyOpenAI(msgs []llm.Message) []map[string]interface{} {
+	out := make([]map[string]interface{}, 0, len(msgs))
+	for _, m := range msgs {
+		item := map[string]interface{}{
+			"role":    string(m.Role),
+			"content": m.Content,
+		}
+		if strings.TrimSpace(m.Reasoning) != "" {
+			item["reasoning"] = m.Reasoning
+		}
+		if m.Role == llm.RoleTool && m.ToolCallID != "" {
+			item["tool_call_id"] = m.ToolCallID
+		}
+		if len(m.ToolCalls) > 0 {
+			tc := make([]map[string]interface{}, 0, len(m.ToolCalls))
+			for _, c := range m.ToolCalls {
+				tc = append(tc, map[string]interface{}{
+					"id":   c.ID,
+					"type": "function",
+					"function": map[string]string{
+						"name":      c.Name,
+						"arguments": c.InputJSON,
+					},
+				})
+			}
+			item["tool_calls"] = tc
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func (s *Server) coddySessionMessagesGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	st := s.coddyEnsureLoaded(w, r, id)
+	if st == nil {
+		return
+	}
+	out := map[string]interface{}{
+		"object":    "coddy.messages",
+		"sessionId": id,
+		"messages":  llmMsgsToCoddyOpenAI(st.GetMessages()),
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+func (s *Server) coddySessionPatch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch {
+		http.NotFound(w, r)
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	var body struct {
+		Title string `json:"title"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, `{"error":{"message":"invalid JSON"}}`, http.StatusBadRequest)
+		return
+	}
+	t := strings.TrimSpace(body.Title)
+	if t == "" {
+		http.Error(w, `{"error":{"message":"title is required"}}`, http.StatusBadRequest)
+		return
+	}
+	st := s.coddyEnsureLoaded(w, r, id)
+	if st == nil {
+		return
+	}
+	st.SetTitlePinned(t)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"object": "coddy.session_patched",
+		"id":     id,
+		"title":  t,
+	})
+}
+
+func (s *Server) coddySessionDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.NotFound(w, r)
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	if err := session.ValidateFolderSessionID(id); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":{"message":%q}}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+	fs := s.coddyRequireStore(w)
+	if fs == nil {
+		return
+	}
+	s.mgr.ForgetLiveSession(id)
+	if err := os.RemoveAll(fs.SessionPath(id)); err != nil {
+		if !os.IsNotExist(err) {
+			s.log.Error("coddy session delete", "error", err)
+			http.Error(w, `{"error":{"message":"delete failed"}}`, http.StatusInternalServerError)
+			return
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"object": "coddy.session_deleted", "id": id})
+}
+
+func (s *Server) coddyPlanGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	st := s.coddyEnsureLoaded(w, r, id)
+	if st == nil {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"object":  "coddy.plan",
+		"entries": st.GetPlan(),
+	})
+}
+
+func (s *Server) coddyPlanPut(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.NotFound(w, r)
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	var body struct {
+		Entries []acp.PlanEntry `json:"entries"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, `{"error":{"message":"invalid JSON"}}`, http.StatusBadRequest)
+		return
+	}
+	st := s.coddyEnsureLoaded(w, r, id)
+	if st == nil {
+		return
+	}
+	st.SetPlan(body.Entries)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"object": "coddy.plan_updated",
+		"count":  len(body.Entries),
+	})
+}
+
+func (s *Server) coddyPlanArchivePost(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.NotFound(w, r)
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	st := s.coddyEnsureLoaded(w, r, id)
+	if st == nil {
+		return
+	}
+	entries := st.GetPlan()
+	if len(entries) == 0 {
+		st.SetPlan(nil)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"object": "coddy.plan_archived", "note": "no active items"})
+		return
+	}
+	for i := range entries {
+		if entries[i].Status != "completed" {
+			entries[i].Status = "completed"
+		}
+	}
+	md := todo.FormatPlanMarkdown(entries)
+	sd := strings.TrimSpace(st.GetPersistedSessionDir())
+	pathNote := ""
+	if sd != "" {
+		dest, err := session.WritePlanArchivedMarkdown(sd, md)
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":{"message":%q}}`, err.Error()), http.StatusInternalServerError)
+			return
+		}
+		pathNote = dest
+	}
+	st.SetPlan(nil)
+	resp := map[string]interface{}{"object": "coddy.plan_archived"}
+	if pathNote != "" {
+		resp["archivePath"] = pathNote
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func memoryRelPath(p string) (string, error) {
+	raw := filepath.ToSlash(strings.TrimSpace(p))
+	if raw == "" {
+		return "", nil
+	}
+	if strings.Contains(raw, "..") {
+		return "", errTraversal
+	}
+	cl := filepath.Clean(raw)
+	if cl == "." {
+		return "", nil
+	}
+	if filepath.IsAbs(cl) {
+		return "", errTraversal
+	}
+	for _, seg := range strings.Split(filepath.ToSlash(cl), "/") {
+		if seg == ".." || seg == "" {
+			return "", errTraversal
+		}
+	}
+	return filepath.FromSlash(strings.Trim(cl, `\`)), nil
+}
+
+func absUnder(root, rel string) (string, error) {
+	rootClean, err := filepath.Abs(filepath.Clean(root))
+	if err != nil {
+		return "", err
+	}
+	joined := filepath.Join(rootClean, rel)
+	target, err := filepath.Abs(joined)
+	if err != nil {
+		return "", err
+	}
+	relCmp, err := filepath.Rel(rootClean, target)
+	if err != nil {
+		return "", errTraversal
+	}
+	for _, seg := range strings.Split(relCmp, string(filepath.Separator)) {
+		if seg == ".." {
+			return "", errTraversal
+		}
+	}
+	return target, nil
+}
+
+func (s *Server) coddyMemoryTree(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	st := s.coddyEnsureLoaded(w, r, id)
+	if st == nil {
+		return
+	}
+	p := s.coddyPaths()
+	rootQ := strings.TrimSpace(r.URL.Query().Get("root"))
+	if rootQ == "" {
+		out := []map[string]string{}
+		if p.globalMemoryRoot != "" {
+			out = append(out, map[string]string{"id": "global", "path": ""})
+		}
+		out = append(out, map[string]string{"id": "workspace", "path": ""})
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"object": "coddy.memory_roots",
+			"roots":  out,
+		})
+		return
+	}
+	wsRoot := filepath.Join(filepath.Clean(st.GetCWD()), "memory")
+	var base string
+	switch rootQ {
+	case "global":
+		if p.globalMemoryRoot == "" {
+			http.Error(w, `{"error":{"message":"global memory root not configured"}}`, http.StatusBadRequest)
+			return
+		}
+		base = p.globalMemoryRoot
+	case "workspace":
+		base = wsRoot
+	default:
+		http.Error(w, `{"error":{"message":"invalid root"}}`, http.StatusBadRequest)
+		return
+	}
+	rel, err := memoryRelPath(r.URL.Query().Get("path"))
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":{"message":%q}}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+	dirAbs, err := absUnder(base, rel)
+	if err != nil {
+		http.Error(w, `{"error":{"message":"bad path"}}`, http.StatusBadRequest)
+		return
+	}
+	fi, err := os.Stat(dirAbs)
+	if err != nil {
+		http.Error(w, `{"error":{"message":"not found"}}`, http.StatusNotFound)
+		return
+	}
+	if !fi.IsDir() {
+		http.Error(w, `{"error":{"message":"not a directory"}}`, http.StatusBadRequest)
+		return
+	}
+	de, err := os.ReadDir(dirAbs)
+	if err != nil {
+		http.Error(w, `{"error":{"message":"list failed"}}`, http.StatusInternalServerError)
+		return
+	}
+	type node struct {
+		Name     string `json:"name"`
+		Kind     string `json:"kind"`
+		Size     int64  `json:"size,omitempty"`
+		Modified string `json:"modified,omitempty"`
+	}
+	nodes := make([]node, 0)
+	for _, e := range de {
+		name := e.Name()
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.IsDir() {
+			nodes = append(nodes, node{Name: name, Kind: "dir", Modified: info.ModTime().UTC().Format(time.RFC3339)})
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(name))
+		if ext != ".md" && ext != ".txt" {
+			continue
+		}
+		nodes = append(nodes, node{Name: name, Kind: "file", Size: info.Size(), Modified: info.ModTime().UTC().Format(time.RFC3339)})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"object": "coddy.memory_tree",
+		"root":   rootQ,
+		"path":   filepath.ToSlash(rel),
+		"nodes":  nodes,
+	})
+}
+
+func (s *Server) coddyResolveMemoryAbs(st *session.State, rootKind, rel string) (abs string, err error) {
+	p := s.coddyPaths()
+	var base string
+	switch rootKind {
+	case "global":
+		if p.globalMemoryRoot == "" {
+			return "", fmt.Errorf("global memory root unavailable")
+		}
+		base = p.globalMemoryRoot
+	case "workspace":
+		base = filepath.Join(filepath.Clean(st.GetCWD()), "memory")
+	default:
+		return "", fmt.Errorf("invalid root")
+	}
+	relSan, terr := memoryRelPath(rel)
+	if terr != nil {
+		return "", terr
+	}
+	return absUnder(base, relSan)
+}
+
+func (s *Server) coddyMemoryFileGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	st := s.coddyEnsureLoaded(w, r, id)
+	if st == nil {
+		return
+	}
+	root := strings.TrimSpace(r.URL.Query().Get("root"))
+	relPath := strings.TrimSpace(r.URL.Query().Get("path"))
+	abs, err := s.coddyResolveMemoryAbs(st, root, relPath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":{"message":%q}}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+	stat, err := os.Stat(abs)
+	if err != nil || stat.IsDir() {
+		http.Error(w, `{"error":{"message":"not found"}}`, http.StatusNotFound)
+		return
+	}
+	ext := strings.ToLower(filepath.Ext(abs))
+	if ext != ".md" && ext != ".txt" {
+		http.Error(w, `{"error":{"message":"unsupported extension"}}`, http.StatusBadRequest)
+		return
+	}
+	b, err := os.ReadFile(abs)
+	if err != nil {
+		http.Error(w, `{"error":{"message":"read failed"}}`, http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"object":  "coddy.memory_file",
+		"root":    root,
+		"path":    filepath.ToSlash(relPath),
+		"content": string(b),
+	})
+}
+
+func (s *Server) coddyMemoryFilePut(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.NotFound(w, r)
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	st := s.coddyEnsureLoaded(w, r, id)
+	if st == nil {
+		return
+	}
+	var body struct {
+		Root    string `json:"root"`
+		Path    string `json:"path"`
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, `{"error":{"message":"invalid JSON"}}`, http.StatusBadRequest)
+		return
+	}
+	root := strings.TrimSpace(body.Root)
+	p := strings.TrimSpace(body.Path)
+	abs, err := s.coddyResolveMemoryAbs(st, root, p)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":{"message":%q}}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+	ext := strings.ToLower(filepath.Ext(abs))
+	if ext != ".md" && ext != ".txt" {
+		http.Error(w, `{"error":{"message":"unsupported extension"}}`, http.StatusBadRequest)
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		http.Error(w, `{"error":{"message":"mkdir failed"}}`, http.StatusInternalServerError)
+		return
+	}
+	tmp := abs + ".tmp"
+	if err := os.WriteFile(tmp, []byte(body.Content), 0o644); err != nil {
+		http.Error(w, `{"error":{"message":"write failed"}}`, http.StatusInternalServerError)
+		return
+	}
+	if err := os.Rename(tmp, abs); err != nil {
+		_ = os.Remove(tmp)
+		http.Error(w, `{"error":{"message":"rename failed"}}`, http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"object": "coddy.memory_file_saved"})
+}
+
+func (s *Server) coddyMemoryDirPost(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.NotFound(w, r)
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	st := s.coddyEnsureLoaded(w, r, id)
+	if st == nil {
+		return
+	}
+	var body struct {
+		Root string `json:"root"`
+		Path string `json:"path"` // subdirectory under allowed root (created)
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, `{"error":{"message":"invalid JSON"}}`, http.StatusBadRequest)
+		return
+	}
+	abs, err := s.coddyResolveMemoryAbs(st, strings.TrimSpace(body.Root), strings.TrimSpace(body.Path))
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":{"message":%q}}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+	if err := os.MkdirAll(abs, 0o755); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":{"message":%q}}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"object": "coddy.memory_dir_created"})
+}
+
+func (s *Server) coddyMemoryFileDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.NotFound(w, r)
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	st := s.coddyEnsureLoaded(w, r, id)
+	if st == nil {
+		return
+	}
+	root := strings.TrimSpace(r.URL.Query().Get("root"))
+	relPath := strings.TrimSpace(r.URL.Query().Get("path"))
+	abs, err := s.coddyResolveMemoryAbs(st, root, relPath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":{"message":%q}}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+	stat, err := os.Stat(abs)
+	if err != nil || stat.IsDir() {
+		http.Error(w, `{"error":{"message":"not found"}}`, http.StatusNotFound)
+		return
+	}
+	if err := os.Remove(abs); err != nil {
+		http.Error(w, `{"error":{"message":"delete failed"}}`, http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"object": "coddy.memory_file_deleted"})
+}

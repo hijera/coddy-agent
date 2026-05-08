@@ -52,8 +52,24 @@ func (s *Sender) SendSessionUpdate(_ string, update interface{}) error {
 	if !s.stream || s.w == nil {
 		return nil
 	}
-	u, ok := update.(acp.MessageChunkUpdate)
-	if !ok || u.SessionUpdate != acp.UpdateTypeAgentMessageChunk {
+	switch u := update.(type) {
+	case acp.MessageChunkUpdate:
+		return s.forwardTextChunk(u)
+	case acp.ToolCallUpdate:
+		return s.writeNamedEventJSON("tool_call", u)
+	case acp.ToolCallStatusUpdate:
+		return s.writeNamedEventJSON("tool_call_update", u)
+	case acp.PlanUpdate:
+		return s.writeNamedEventJSON("plan", u)
+	case acp.TokenUsageUpdate:
+		return s.writeNamedEventJSON("token_usage", u)
+	default:
+		return nil
+	}
+}
+
+func (s *Sender) forwardTextChunk(u acp.MessageChunkUpdate) error {
+	if u.SessionUpdate != acp.UpdateTypeAgentMessageChunk {
 		return nil
 	}
 	text := ""
@@ -62,6 +78,12 @@ func (s *Sender) SendSessionUpdate(_ string, update interface{}) error {
 	}
 	if text == "" {
 		return nil
+	}
+	choiceDelta := map[string]interface{}{}
+	if u.Content.Type == acp.ContentTypeReasoning {
+		choiceDelta["reasoning_content"] = text
+	} else {
+		choiceDelta["content"] = text
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -72,7 +94,7 @@ func (s *Sender) SendSessionUpdate(_ string, update interface{}) error {
 		"model":   s.model,
 		"choices": []map[string]interface{}{{
 			"index": 0,
-			"delta": map[string]interface{}{"content": text},
+			"delta": choiceDelta,
 		}},
 	}
 	line, err := json.Marshal(delta)
@@ -80,6 +102,22 @@ func (s *Sender) SendSessionUpdate(_ string, update interface{}) error {
 		return err
 	}
 	if _, err := fmt.Fprintf(s.w, "data: %s\n\n", line); err != nil {
+		return err
+	}
+	if s.flusher != nil {
+		s.flusher.Flush()
+	}
+	return nil
+}
+
+func (s *Sender) writeNamedEventJSON(event string, payload interface{}) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	line, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(s.w, "event: %s\ndata: %s\n\n", event, line); err != nil {
 		return err
 	}
 	if s.flusher != nil {
@@ -101,6 +139,8 @@ func (s *Sender) FinishStream() error {
 	if !s.stream || s.w == nil {
 		return nil
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	_, err := io.WriteString(s.w, "data: [DONE]\n\n")
 	if s.flusher != nil {
 		s.flusher.Flush()

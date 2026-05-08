@@ -28,7 +28,7 @@ export WORK_DIR
 export BASE_URL="http://127.0.0.1:$PORT/v1"
 export MODEL="${MODEL:-rpa/gpt-oss:120b}"
 
-"$BIN" http --config "$CODDY_CONFIG" --disable-session --home "$HOME_DIR" --cwd "$WORK_DIR" -H 127.0.0.1 -P "$PORT" &
+"$BIN" http --config "$CODDY_CONFIG" --home "$HOME_DIR" --cwd "$WORK_DIR" -H 127.0.0.1 -P "$PORT" &
 HTTP_PID=$!
 if ! kill -0 "$HTTP_PID" 2>/dev/null; then
   echo "http server failed to start" >&2
@@ -48,6 +48,7 @@ python3 "$ROOT/examples/http_smoke_basic.py"
 if [[ "${RUN_LIVE:-0}" == "1" ]]; then
   python3 "$ROOT/examples/http_agent_todo_e2e_demo.py"
   python3 "$ROOT/examples/http_memory_copilot_e2e_demo.py"
+  python3 "$ROOT/examples/http_toolcalls_persist_e2e_demo.py"
 fi
 
 echo "ok httpserver tests"

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/EvilFreelancer/coddy-agent/internal/acp"
 	"github.com/EvilFreelancer/coddy-agent/internal/config"
@@ -131,6 +132,8 @@ func (a *Agent) Run(ctx context.Context, prompt []acp.ContentBlock) (string, err
 	}
 
 	var totalInputTokens, totalOutputTokens int
+	var turnIndex int
+	var lastStatsWrite time.Time
 
 	// ReAct loop.
 	for turn := 0; turn < maxTurns; turn++ {
@@ -147,6 +150,7 @@ func (a *Agent) Run(ctx context.Context, prompt []acp.ContentBlock) (string, err
 		// Call LLM and stream response.
 		var response *llm.Response
 		var streamErr error
+		var reasoningBuf strings.Builder
 
 		sessionID := a.state.GetID()
 		response, streamErr = provider.Stream(ctx, messages, toolDefs, func(chunk llm.StreamChunk) {
@@ -154,6 +158,7 @@ func (a *Agent) Run(ctx context.Context, prompt []acp.ContentBlock) (string, err
 				return
 			}
 			if chunk.ReasoningDelta != "" {
+				reasoningBuf.WriteString(chunk.ReasoningDelta)
 				_ = a.server.SendSessionUpdate(sessionID, acp.MessageChunkUpdate{
 					SessionUpdate: acp.UpdateTypeAgentMessageChunk,
 					Content:       acp.ContentBlock{Type: acp.ContentTypeReasoning, Text: chunk.ReasoningDelta},
@@ -166,6 +171,16 @@ func (a *Agent) Run(ctx context.Context, prompt []acp.ContentBlock) (string, err
 				})
 			}
 			if chunk.ToolCall != nil && chunk.ToolCall.Name != "" {
+				if st := sessionStatePtr(a.state); st != nil {
+					if sd := strings.TrimSpace(st.GetPersistedSessionDir()); sd != "" && strings.TrimSpace(chunk.ToolCall.ID) != "" {
+						_ = session.WriteToolCallMeta(sd, chunk.ToolCall.ID, session.ToolCallMeta{
+							ToolCallID: strings.TrimSpace(chunk.ToolCall.ID),
+							Name:       chunk.ToolCall.Name,
+							Kind:       toolKind(chunk.ToolCall.Name),
+							Status:     "pending",
+						})
+					}
+				}
 				_ = a.server.SendSessionUpdate(sessionID, acp.ToolCallUpdate{
 					SessionUpdate: acp.UpdateTypeToolCall,
 					ToolCallID:    chunk.ToolCall.ID,
@@ -193,10 +208,36 @@ func (a *Agent) Run(ctx context.Context, prompt []acp.ContentBlock) (string, err
 			TotalTokens:   totalInputTokens + totalOutputTokens,
 		})
 
+		if sd != "" {
+			now := time.Now().UTC()
+			if lastStatsWrite.IsZero() || now.Sub(lastStatsWrite) > 750*time.Millisecond {
+				lastStatsWrite = now
+				stats := session.SessionStats{
+					Version:   1,
+					UpdatedAt: now.Format(time.RFC3339),
+					TokenUsageTotal: session.TokenUsageTotals{
+						InputTokens:  totalInputTokens,
+						OutputTokens: totalOutputTokens,
+						TotalTokens:  totalInputTokens + totalOutputTokens,
+					},
+					TokenUsageByTurn: []session.TokenUsageTurn{{
+						TurnIndex:    turnIndex,
+						InputTokens:  response.InputTokens,
+						OutputTokens: response.OutputTokens,
+						TotalTokens:  totalInputTokens + totalOutputTokens,
+						Timestamp:    now.Format(time.RFC3339),
+					}},
+				}
+				_ = session.WriteSessionStats(sd, stats)
+			}
+		}
+		turnIndex++
+
 		// Append assistant message to history.
 		assistantMsg := llm.Message{
 			Role:      llm.RoleAssistant,
 			Content:   response.Content,
+			Reasoning: strings.TrimSpace(reasoningBuf.String()),
 			ToolCalls: response.ToolCalls,
 		}
 		messages = append(messages, assistantMsg)
@@ -248,6 +289,16 @@ func (a *Agent) Run(ctx context.Context, prompt []acp.ContentBlock) (string, err
 
 // executeToolCall runs a single tool call and reports updates to the client.
 func (a *Agent) executeToolCall(ctx context.Context, tc llm.ToolCall, env *tools.Env, mode, sessionID string) (string, error) {
+	sessionDir := ""
+	if st := sessionStatePtr(a.state); st != nil {
+		sessionDir = strings.TrimSpace(st.GetPersistedSessionDir())
+	}
+
+	if sessionDir != "" && strings.TrimSpace(tc.ID) != "" {
+		_ = session.MarkToolCallStarted(sessionDir, tc.ID, tc.Name, toolKind(tc.Name), "in_progress")
+		_ = session.WriteToolCallArgs(sessionDir, tc.ID, tc.InputJSON)
+	}
+
 	// Mark as in_progress, include raw InputJSON so connected clients can show args.
 	_ = a.server.SendSessionUpdate(sessionID, acp.ToolCallStatusUpdate{
 		SessionUpdate: acp.UpdateTypeToolCallUpdate,
@@ -341,6 +392,15 @@ func (a *Agent) executeToolCall(ctx context.Context, tc llm.ToolCall, env *tools
 	status := "completed"
 	if execErr != nil {
 		status = "failed"
+	}
+
+	if sessionDir != "" && strings.TrimSpace(tc.ID) != "" {
+		finalText := result
+		if execErr != nil {
+			finalText = fmt.Sprintf("error: %v", execErr)
+		}
+		_ = session.WriteToolCallResult(sessionDir, tc.ID, finalText)
+		_ = session.MarkToolCallFinished(sessionDir, tc.ID, tc.Name, toolKind(tc.Name), status)
 	}
 
 	var content []acp.ToolCallResultItem

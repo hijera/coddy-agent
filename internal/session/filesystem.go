@@ -21,6 +21,7 @@ const (
 	todosDirName         = "todos"
 	todosArchiveName     = "archive"
 	activeTodoFile       = "active.md"
+	toolCallsDirName     = "tool_calls"
 	sessionFileLayout    = 1
 	messagesLayout       = 1
 	permissionGrantsVer  = 1
@@ -34,6 +35,16 @@ type FileStore struct {
 // SessionPath returns the directory for a session id.
 func (f *FileStore) SessionPath(sessionID string) string {
 	return filepath.Join(f.Root, sessionID)
+}
+
+// HasPersistedSnapshot reports whether session.json exists for the id under Root.
+func (f *FileStore) HasPersistedSnapshot(sessionID string) bool {
+	if f == nil || f.Root == "" {
+		return false
+	}
+	meta := filepath.Join(f.SessionPath(sessionID), sessionMetaFile)
+	fi, err := os.Stat(meta)
+	return err == nil && !fi.IsDir()
 }
 
 // ActiveTodoPath is the markdown file for the current todo list.
@@ -53,6 +64,9 @@ func (f *FileStore) EnsureLayout(sessionID string) (dir string, err error) {
 		return "", err
 	}
 	if err := os.MkdirAll(AssetsPath(dir), 0o755); err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Join(dir, toolCallsDirName), 0o755); err != nil {
 		return "", err
 	}
 	metaPath := filepath.Join(dir, sessionMetaFile)
@@ -85,6 +99,7 @@ type sessionMetaFileData struct {
 	SelectedModelID string `json:"selectedModelId,omitempty"`
 	AgentMemory     string `json:"agentMemory,omitempty"`
 	Title           string `json:"title,omitempty"`
+	TitlePinned     string `json:"titlePinned,omitempty"`
 	UpdatedAt       string `json:"updatedAt,omitempty"`
 }
 
@@ -185,6 +200,9 @@ func (f *FileStore) ListSnapshots(cwdFilter string) ([]SessionListEntry, error) 
 			continue
 		}
 		id := ent.Name()
+		if strings.HasPrefix(id, "sched_") {
+			continue
+		}
 		snap, err := f.ReadSnapshot(id)
 		if err != nil {
 			continue
@@ -220,7 +238,7 @@ func (f *FileStore) Save(state *State) error {
 		return fmt.Errorf("session has no SessionDir")
 	}
 	msgs := state.GetMessages()
-	title := deriveSessionTitle(state)
+	title := persistedConversationTitle(state)
 	meta := sessionMetaFileData{
 		Version:         sessionFileLayout,
 		ID:              state.ID,
@@ -229,6 +247,7 @@ func (f *FileStore) Save(state *State) error {
 		SelectedModelID: state.GetSelectedModelID(),
 		AgentMemory:     state.GetAgentMemory(),
 		Title:           title,
+		TitlePinned:     strings.TrimSpace(state.GetTitlePinned()),
 		UpdatedAt:       time.Now().UTC().Format(time.RFC3339),
 	}
 	if err := writeJSONAtomic(filepath.Join(dir, sessionMetaFile), meta); err != nil {
@@ -259,6 +278,14 @@ func deriveSessionTitle(s *State) string {
 		}
 	}
 	return ""
+}
+
+// persistedConversationTitle selects the snapshot title saved to session.json.
+func persistedConversationTitle(s *State) string {
+	if p := strings.TrimSpace(s.GetTitlePinned()); p != "" {
+		return p
+	}
+	return deriveSessionTitle(s)
 }
 
 func truncateRunes(s string, max int) string {

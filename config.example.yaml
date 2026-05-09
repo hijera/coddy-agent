@@ -125,9 +125,11 @@ tools:
 # Long-term memory copilot (external/memory; always in the binary). Toggle with memory.enabled.
 # Stores markdown under memory.dir (default ${CODDY_HOME}/memory) and <session cwd>/memory (project). Injects text into the
 # same {{.Memory}} section as session notes; main agent never sees memory_* tools.
+# memory.model is used ONLY for recall + persist LLM calls. Set it to an exact models[].model id when you want memory
+# pinned independently of agent.model (example: "rpa/gpt-oss:120b"). Leave empty to reuse the session or agent default model.
 # memory:
 #   enabled: false
-#   model: "" # optional selector from models[]; empty uses the active agent model
+#   model: ""
 #   dir: "" # default ${CODDY_HOME}/memory when empty
 #   recall_max_turns: 6
 #   persist_max_turns: 4

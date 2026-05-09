@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """ACP e2e: session configOptions list every configured model and set_config_option can switch.
 
-Expects ``CODDY_CONFIG`` (default ``examples/config.demo.yaml``) to define at least two ``models[].model`` entries.
+Expects ``CODDY_CONFIG`` (default ``examples/config.demo.yaml``) to define at least one ``models[].model`` entry.
+When several exist, sets ``model`` to a different selector than ``agent.model`` where possible.
 """
 
 from __future__ import annotations
@@ -92,14 +93,15 @@ def main() -> int:
     raw = cfg_path.read_text(encoding="utf-8")
     yaml_models = parse_models_from_yaml(raw)
     agent_default = parse_agent_default_model(raw)
-    if len(yaml_models) < 2:
-        print("need at least two models[] entries", yaml_models, file=sys.stderr)
+    if len(yaml_models) < 1:
+        print("need at least one models[] entry", yaml_models, file=sys.stderr)
         return 1
     if agent_default not in yaml_models:
         print("agent.model must appear in models list", agent_default, file=sys.stderr)
         return 1
 
-    alt = next(m for m in yaml_models if m != agent_default)
+    alts = [m for m in yaml_models if m != agent_default]
+    alt = alts[0] if alts else agent_default
 
     session_root = os.environ.get("SESSION_ROOT", "/tmp/coddy-examples-acp-models")
     session_id = os.environ.get("SESSION_ID", "example-acp-models")

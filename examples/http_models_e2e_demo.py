@@ -3,7 +3,7 @@
 
 Prerequisites: ``coddy http`` is already listening (same host/port as BASE_URL).
 
-Use the usual demo config with at least two ``models[].model`` rows (``examples/config.demo.yaml``).
+Uses ``examples/config.demo.yaml`` (or ``CODDY_CONFIG``). One ``models[].model`` row is enough; when multiple exist, picks a different selector than ``agent.model`` when possible for the metadata echo check.
 
 Environment:
 
@@ -15,8 +15,9 @@ The script verifies:
 1. ``GET /v1/models`` lists ``agent`` and ``plan`` with ``owned_by`` ``coddy`` and every YAML
    model row with ``owned_by`` equal to the provider prefix.
 2. Direct completion rejects a body that includes ``metadata.model`` (HTTP 400).
-3. ``POST /v1/responses`` with ``model=agent`` and ``metadata.model`` set to a second configured
-   selector returns HTTP 200 and echoes that selector inside response ``metadata.model`` (needs a working LLM).
+3. ``POST /v1/responses`` with ``model=agent`` and ``metadata.model`` set to a configured selector (not
+   necessarily different from ``agent.model`` when only one model exists) returns HTTP 200 and echoes it in
+   response ``metadata.model`` (needs a working LLM).
 """
 
 from __future__ import annotations
@@ -83,8 +84,8 @@ def main() -> int:
     raw = cfg_path.read_text(encoding="utf-8")
     yaml_models = parse_models_from_yaml(raw)
     agent_default = parse_agent_default_model(raw)
-    if len(yaml_models) < 2:
-        print("need at least two models[] entries for this demo, got:", yaml_models, file=sys.stderr)
+    if len(yaml_models) < 1:
+        print("need at least one models[] entry for this demo, got:", yaml_models, file=sys.stderr)
         return 1
     if not agent_default or agent_default not in yaml_models:
         print("agent.model must match a models[].model row", agent_default, yaml_models, file=sys.stderr)
@@ -92,7 +93,8 @@ def main() -> int:
 
     base = os.environ.get("BASE_URL", "http://127.0.0.1:19876/v1").rstrip("/")
 
-    alt = next(m for m in yaml_models if m != agent_default)
+    alts = [m for m in yaml_models if m != agent_default]
+    alt = alts[0] if alts else agent_default
     primary = yaml_models[0]
 
     code, blob, _ = http_json("GET", f"{base}/models", None, {})

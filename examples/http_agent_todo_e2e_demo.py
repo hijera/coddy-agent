@@ -33,7 +33,8 @@ def http_json(method: str, url: str, body: dict[str, Any] | None, headers: dict[
 
 def main() -> int:
     base = os.environ.get("BASE_URL", "http://127.0.0.1:19876/v1").rstrip("/")
-    model = os.environ.get("MODEL", "rpa/gpt-oss:120b").strip()
+    yaml_model = os.environ.get("MODEL", "rpa/gpt-oss:120b").strip()
+    profile = os.environ.get("CODDY_CHAT_PROFILE", "agent").strip()
     work = Path(os.environ.get("WORK_DIR", "")).resolve()
     if not work.is_dir():
         print("WORK_DIR must point to an existing directory", file=sys.stderr)
@@ -55,7 +56,12 @@ The file must include the final checklist and one sentence recap.
     code, cc, headers = http_json(
         "POST",
         f"{base}/chat/completions",
-        {"model": model, "stream": False, "messages": [{"role": "user", "content": prompt}]},
+        {
+            "model": profile,
+            "stream": False,
+            "metadata": {"model": yaml_model},
+            "messages": [{"role": "user", "content": prompt}],
+        },
         {},
     )
     if code != 200:

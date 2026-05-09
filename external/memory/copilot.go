@@ -15,29 +15,55 @@ import (
 const recallSystem = `You are the memory retrieval step for a coding agent. You never speak to the end user directly.
 Your only job is to load useful long-term notes from disk BEFORE the main assistant answers.
 
-Tools available here are READ-ONLY (search + read only). Do not attempt to save, edit, or delete files in this phase: persistence is handled by a separate curator after the main reply.
+Tools are READ-ONLY in this phase: search, list, read. Do not save, mkdir, edit, or delete here; persistence is handled by the curator after the main reply.
 
-Paths are always scope:relative where scope is global or project.
-Global memory uses memory.dir from config when set, otherwise $CODDY_HOME/memory (often ~/.coddy/memory). Project memory is always <session cwd>/memory.
+Paths are always scope:relative where scope is global or project (example global:preferences.md or project:architecture/api.md).
+Global memory uses memory.dir from config when set, otherwise $CODDY_HOME/memory (often ~/.coddy/memory). Project memory is cwd/memory.
+
+Folders: use coddy_memory_list to inspect layout; thematic subfolders mirror how notes are organized on disk.
+
+Cross-links inside note bodies use the same scope:relative form or Markdown links targeting that path.
+
+Workflow (use several tool rounds if needed):
+1. coddy_memory_search (and list when layout is unclear) to find entry files relevant to the current user message.
+2. coddy_memory_read those files. When a body references other memory paths you still need, read those in follow-up rounds until you have enough context for this turn.
+3. Finish with plain text only (no more tool calls). Structure the answer so the main assistant can tell:
+   - "Already on disk" - short factual bullets grounded ONLY in what you actually read (no invention).
+   - "Not in notes" - optional short bullets for user intent or facts that nothing you read covered, so the main model knows what is not yet in long-term memory (do not guess file contents you did not open).
 
 Rules:
-- Call coddy_memory_search first unless you already know the exact path to read.
-- Prefer short factual bullets in your final reply. Do not expose raw tool JSON.
+- Call coddy_memory_search first unless you already know exact paths.
+- Call coddy_memory_list when you need the directory layout.
+- Prefer short factual bullets. Do not expose raw tool JSON.
 - Do not invent facts you did not read from files.
 - If nothing is relevant, reply with a single line exactly: (no memory hits)
 - When you finish gathering, answer in plain text without further tool calls.`
 
-const judgeSystem = `You are a strict memory curator for a coding agent. You decide whether ONE distilled fact from this assistant turn should be persisted for future sessions.
-Reply with a single JSON object only, no markdown fences. Schema:
-{"save":false,"title":"","body":"","scope":"global","reason":"..."}
-When save is true use scope "global" or "project". Body must be markdown, at most 900 characters, no API keys, tokens, passwords, or one-off secrets.
+const persistSystem = `You are a strict memory curator for a coding agent. You never speak to the end user directly.
 
-Set save to true ONLY when at least one holds:
-- The user explicitly asked to remember / store / save something for later sessions, and the assistant agreed to a concrete fact; OR
-- The assistant stated a durable preference or project fact (stack, coding style, naming, architecture decision) that will clearly help future turns in this repo.
+You MAY call coddy_memory_search, coddy_memory_list, coddy_memory_read, coddy_memory_mkdir, coddy_memory_save, and coddy_memory_delete during this phase.
 
-Set save to false for: transient debugging, one-off errors, task status, chat filler, duplicate of obvious context, pure social chat, or anything that is not clearly reusable later.
-When in doubt, save false.`
+Before writing, discover what is already stored:
+- Use search, list, and a short chain of reads (including linked paths) like in recall so you see existing notes relevant to this user turn and assistant reply.
+
+Then decide what is NET-NEW durable information compared to files you actually read:
+- If the fact or preference already exists on disk (same meaning), skip coddy_memory_save unless the user clearly asked to revise or replace it.
+- Save only substantive gaps: things the assistant stated that belong in long-term memory and are missing or outdated in what you read.
+
+Prefer thematic folders: call coddy_memory_mkdir before the first coddy_memory_save under a new path.
+Use scope-relative paths everywhere (global:... or project:...).
+
+When linking between notes inside bodies, prefer scope:relative paths or Markdown with the same target.
+
+Secrets: never store API keys, tokens, passwords, or one-off credentials in coddy_memory_save body.
+
+coddy_memory_save ONLY when one of these applies AND the idea is not already adequately covered by an existing note you read:
+- The user explicitly asked to remember / store / save something for later sessions, and the assistant agreed to a concrete fact.
+- The assistant stated a durable preference or project fact (stack, coding style, naming, architecture decision) that will clearly help future turns.
+
+Do NOT save transient debugging, one-off errors, task status, duplicates, filler, or chat that is not reusable. When unsure, skip save.
+
+When deciding is done, respond with plain text only (no tool calls). Summarize: what you verified on disk, what you saved or skipped (and why).`
 
 func clampProviderMax(rm *config.ResolvedLLM, cap int) {
 	if rm == nil || cap <= 0 {
@@ -186,15 +212,7 @@ func runRecallStreamRound(ctx context.Context, prov llm.Provider, msgs []llm.Mes
 	return resp, nil
 }
 
-type judgeResult struct {
-	Save   bool   `json:"save"`
-	Title  string `json:"title"`
-	Body   string `json:"body"`
-	Scope  string `json:"scope"`
-	Reason string `json:"reason"`
-}
-
-// PersistOutcome is the structured result after the memory judge runs.
+// PersistOutcome is the structured result after the memory curator runs.
 type PersistOutcome struct {
 	Saved        bool
 	Scope        string
@@ -202,17 +220,16 @@ type PersistOutcome struct {
 	Title        string
 	Body         string // markdown body written when Saved (trimmed, for UI)
 	Reason       string
-	RawJudge     string // full aggregated model output (for UI trace)
+	RawJudge     string // full final curator text (trace / UI)
 }
 
-// RunPersistOptions configures optional hooks for persist (judge) streaming.
+// RunPersistOptions configures optional hooks for persist streaming.
 type RunPersistOptions struct {
 	OnPhaseStart func()
 	OnStream     func(kind StreamKind, delta string)
 }
 
-// RunPersist optionally writes a new memory file after an LLM-as-judge step.
-// Returns structured outcome, wall-clock milliseconds for the judge LLM call, and error when the LLM fails.
+// RunPersist optionally writes memory via tool-calling curator after a user turn.
 func RunPersist(ctx context.Context, log *slog.Logger, cfg *config.Config, cwd, modelRef, userQuery, assistantReply string, opts *RunPersistOptions) (PersistOutcome, int64, error) {
 	out := PersistOutcome{}
 	if !cfg.Memory.Enabled {
@@ -222,98 +239,103 @@ func RunPersist(ctx context.Context, log *slog.Logger, cfg *config.Config, cwd, 
 	if assistantReply == "" {
 		return out, 0, nil
 	}
+	store, err := NewStore(&cfg.Memory, cfg.Paths, cwd)
+	if err != nil {
+		return out, 0, err
+	}
 	prov, err := newCopilotProvider(cfg, modelRef)
 	if err != nil {
 		return out, 0, err
 	}
 	userPayload := fmt.Sprintf("User:\n%s\n\nAssistant:\n%s\n", userQuery, assistantReply)
+	tools := PersistToolDefinitions()
 	msgs := []llm.Message{
-		{Role: llm.RoleSystem, Content: judgeSystem},
+		{Role: llm.RoleSystem, Content: persistSystem},
 		{Role: llm.RoleUser, Content: userPayload},
 	}
 	persistStarted := timeNowMs()
 	if opts != nil && opts.OnPhaseStart != nil {
 		opts.OnPhaseStart()
 	}
-	var resp *llm.Response
-	if opts != nil && opts.OnStream != nil {
-		resp, err = runJudgeStreamRound(ctx, prov, msgs, opts.OnStream)
-	} else {
-		resp, err = prov.Complete(ctx, msgs, nil)
+	max := cfg.Memory.PersistMaxTurns
+	type saveCapture struct {
+		scopeLabel   string
+		relativePath string
+		title        string
+		body         string
 	}
-	if err != nil {
-		return out, timeNowMs() - persistStarted, err
-	}
-	out.RawJudge = strings.TrimSpace(resp.Content)
-	raw := extractJSONObject(resp.Content)
-	var jr judgeResult
-	dur := timeNowMs() - persistStarted
-	if err := json.Unmarshal([]byte(raw), &jr); err != nil {
-		if log != nil {
-			log.Warn("memory judge parse failed", "error", err)
+	var lastSave *saveCapture
+	for step := 0; step < max; step++ {
+		if ctx.Err() != nil {
+			return out, timeNowMs() - persistStarted, ctx.Err()
 		}
-		return out, dur, nil
+		var resp *llm.Response
+		if opts != nil && opts.OnStream != nil {
+			resp, err = runRecallStreamRound(ctx, prov, msgs, tools, opts.OnStream)
+		} else {
+			resp, err = prov.Complete(ctx, msgs, tools)
+		}
+		if err != nil {
+			return out, timeNowMs() - persistStarted, err
+		}
+		if len(resp.ToolCalls) == 0 {
+			finalText := strings.TrimSpace(resp.Content)
+			out.RawJudge = finalText
+			out.Reason = finalText
+			if lastSave != nil {
+				out.Saved = true
+				out.Scope = lastSave.scopeLabel
+				out.RelativePath = lastSave.relativePath
+				out.Title = lastSave.title
+				out.Body = lastSave.body
+				if log != nil {
+					log.Info("memory saved", "path", lastSave.relativePath)
+				}
+			}
+			return out, timeNowMs() - persistStarted, nil
+		}
+		msgs = append(msgs, llm.Message{Role: llm.RoleAssistant, Content: resp.Content, ToolCalls: resp.ToolCalls})
+		for _, tc := range resp.ToolCalls {
+			res, ex := execTool(store, &cfg.Memory, tc.Name, tc.InputJSON)
+			if ex != nil {
+				res = "error: " + ex.Error()
+			} else if tc.Name == "coddy_memory_save" {
+				var args struct {
+					Title        string `json:"title"`
+					Body         string `json:"body"`
+					Scope        string `json:"scope"`
+					RelativePath string `json:"relative_path"`
+				}
+				if uerr := json.Unmarshal([]byte(tc.InputJSON), &args); uerr == nil {
+					written := strings.TrimPrefix(strings.TrimSpace(res), "saved as")
+					written = strings.TrimSpace(written)
+					body := strings.TrimSpace(args.Body)
+					if len(body) > 900 {
+						body = body[:900] + "\n..."
+					}
+					lastSave = &saveCapture{
+						scopeLabel:   strings.ToLower(strings.TrimSpace(args.Scope)),
+						relativePath: written,
+						title:        strings.TrimSpace(args.Title),
+						body:         body,
+					}
+				}
+			}
+			msgs = append(msgs, llm.Message{Role: llm.RoleTool, ToolCallID: tc.ID, Content: res})
+		}
 	}
-	if !jr.Save {
-		return out, dur, nil
-	}
-	scope := strings.ToLower(strings.TrimSpace(jr.Scope))
-	if scope != "global" && scope != "project" {
-		scope = "global"
-	}
-	store, err := NewStore(&cfg.Memory, cfg.Paths, cwd)
-	if err != nil {
-		return out, dur, err
-	}
-	body := strings.TrimSpace(jr.Body)
-	if len(body) > 900 {
-		body = body[:900] + "\n..."
-	}
-	relPath, err := store.Write(scope, jr.Title, body)
-	if err != nil {
-		return out, dur, err
-	}
-	out.Saved = true
-	out.Scope = scope
-	out.RelativePath = relPath
-	out.Title = jr.Title
-	out.Body = body
-	out.Reason = jr.Reason
 	if log != nil {
-		log.Info("memory saved", "scope", scope, "reason", jr.Reason)
+		log.Warn("memory persist exceeded max turns")
+	}
+	dur := timeNowMs() - persistStarted
+	if lastSave != nil {
+		out.Saved = true
+		out.Scope = lastSave.scopeLabel
+		out.RelativePath = lastSave.relativePath
+		out.Title = lastSave.title
+		out.Body = lastSave.body
+		out.Reason = "persist stopped at max turns after a save"
+		out.RawJudge = out.Reason
 	}
 	return out, dur, nil
-}
-
-func runJudgeStreamRound(ctx context.Context, prov llm.Provider, msgs []llm.Message, onStream func(kind StreamKind, delta string)) (*llm.Response, error) {
-	return prov.Stream(ctx, msgs, nil, func(ch llm.StreamChunk) {
-		if onStream == nil {
-			return
-		}
-		if ch.TextDelta != "" {
-			onStream(StreamKindText, ch.TextDelta)
-		}
-		if ch.ReasoningDelta != "" {
-			onStream(StreamKindReasoning, ch.ReasoningDelta)
-		}
-	})
-}
-
-func extractJSONObject(s string) string {
-	s = strings.TrimSpace(s)
-	if i := strings.Index(s, "```"); i >= 0 {
-		s = strings.TrimSpace(s[i+3:])
-		if j := strings.Index(s, "\n"); j >= 0 && strings.HasPrefix(strings.TrimSpace(s[:j]), "json") {
-			s = strings.TrimSpace(s[j+1:])
-		}
-		if k := strings.Index(s, "```"); k >= 0 {
-			s = strings.TrimSpace(s[:k])
-		}
-	}
-	start := strings.Index(s, "{")
-	end := strings.LastIndex(s, "}")
-	if start < 0 || end <= start {
-		return "{}"
-	}
-	return s[start : end+1]
 }

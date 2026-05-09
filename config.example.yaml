@@ -132,7 +132,7 @@ tools:
 #   model: ""
 #   dir: "" # default ${CODDY_HOME}/memory when empty
 #   recall_max_turns: 6
-#   persist_max_turns: 4
+#   persist_max_turns: 12
 #   copilot_max_tokens: 4096
 #   max_search_hits: 8
 

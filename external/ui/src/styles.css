@@ -69,6 +69,8 @@ body {
   grid-template-columns: auto minmax(0, 1fr);
   gap: 0;
   min-height: 0;
+  /* Narrow default; overwritten at runtime via NavRail ResizeObserver when column width changes */
+  --rail-shell-track-width: calc(var(--rail-pill-track) + var(--rail-column-pad-end));
 }
 
 .shell-main {
@@ -494,11 +496,8 @@ body {
   position: fixed;
   top: 14px;
   bottom: 14px;
-  left: calc(var(--rail-pill-track) + var(--rail-column-pad-end) + var(--nav-floating-gutter));
-  width: min(
-    320px,
-    calc(100vw - var(--rail-pill-track) - var(--rail-column-pad-end) - var(--nav-floating-gutter) - 16px)
-  );
+  left: calc(var(--rail-shell-track-width) + var(--nav-floating-gutter));
+  width: min(320px, calc(100vw - var(--rail-shell-track-width) - var(--nav-floating-gutter) - 16px));
   border-radius: 18px;
   background: var(--sidebar);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1511,11 +1510,6 @@ textarea#composer {
 
 /* Desktop */
 @media (min-width: 900px) {
-  .shell-rail-wide .sessions.drawer {
-    left: 212px;
-    width: min(320px, calc(100vw - 236px));
-  }
-
   .main {
     padding: 14px 18px 18px;
   }

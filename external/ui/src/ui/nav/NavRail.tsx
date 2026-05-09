@@ -1,3 +1,5 @@
+import { useLayoutEffect, useRef } from 'react';
+
 /** Octicon-style mark, integer geometry (reads clearly at 18px). */
 function IconGitHub(props: { className?: string }) {
   return (
@@ -60,12 +62,31 @@ export function NavRail(props: {
   railLabelsWide: boolean;
   onToggleRailLabels: () => void;
 }) {
+  const railRef = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    const el = railRef.current;
+    const shell = el?.closest('.shell');
+    if (!el || !(shell instanceof HTMLElement)) {
+      return undefined;
+    }
+    const syncTrack = () => {
+      shell.style.setProperty('--rail-shell-track-width', `${el.offsetWidth}px`);
+    };
+    syncTrack();
+    const ro = new ResizeObserver(syncTrack);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      shell.style.removeProperty('--rail-shell-track-width');
+    };
+  }, [props.canWidenRail, props.railLabelsWide]);
+
   const pillWide = props.canWidenRail && props.railLabelsWide;
   const navBtnCls = pillWide ? 'rail-hit rail-nav-hit rail-nav-hit-wide' : 'rail-hit rail-hit-icon rail-nav-hit rail-nav-hit-narrow';
   const navLinkCls = pillWide ? 'rail-hit rail-nav-hit rail-nav-hit-wide rail-link' : 'rail-hit rail-hit-link rail-nav-hit rail-nav-hit-narrow rail-link';
 
   return (
-    <aside className={`rail-column ${pillWide ? 'rail-column-wide' : ''}`} aria-label="Nav">
+    <aside ref={railRef} className={`rail-column ${pillWide ? 'rail-column-wide' : ''}`} aria-label="Nav">
       <div className={`rail-pill ${pillWide ? 'is-wide' : ''}`}>
         {props.canWidenRail ? (
           pillWide ? (

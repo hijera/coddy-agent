@@ -398,7 +398,7 @@ Tool call statuses: `pending` | `in_progress` | `completed` | `failed` | `cancel
 
 ### `memory_phase` - Memory copilot phase boundary
 
-When `memory.enabled` is true in config, the memory copilot runs outside the main ReAct tool list. Clients may show a **memory** foldout (similar to thinking) using these markers. Phases: `recall` (before the main model answers) and `persist` (judge after a clean end-of-turn assistant message). Status: `started` | `completed`. `durationMs` is set on `completed`.
+When `memory.enabled` is true in config, the memory copilot runs outside the main ReAct tool list. Clients may show a **memory** foldout (similar to thinking) using these markers. Phases: `recall` (before the main model answers, read-only tools) and `persist` (memory curator tools after a clean end-of-turn assistant message). Status: `started` | `completed`. `durationMs` is set on `completed`.
 
 ```json
 {

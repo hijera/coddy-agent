@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/EvilFreelancer/coddy-agent/internal/config"
@@ -218,6 +219,55 @@ func (s *Store) Search(query string, scope string, maxHits int) ([]Hit, error) {
 	return out, nil
 }
 
+func scopeLabelFromPrefix(prefix string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(prefix)) {
+	case "global":
+		return "global", nil
+	case "project":
+		return "project", nil
+	default:
+		return "", fmt.Errorf("unknown scope %q", prefix)
+	}
+}
+
+func (s *Store) resolveScopeRoot(scopeOrPrefix string) (label string, root string, err error) {
+	scopeOrPrefix = strings.TrimSpace(scopeOrPrefix)
+	if scopeOrPrefix == "" {
+		return "", "", fmt.Errorf("missing scope")
+	}
+	lab, err := scopeLabelFromPrefix(scopeOrPrefix)
+	if err != nil {
+		return "", "", err
+	}
+	switch lab {
+	case "global":
+		return lab, s.globalRoot, nil
+	case "project":
+		return lab, s.projectRoot, nil
+	default:
+		return "", "", fmt.Errorf("unknown scope %q", lab)
+	}
+}
+
+// joinUnderRoot validates rest stays under root (no ".." escapes) and returns absolute path.
+func joinUnderRoot(root, rest string) (abs string, err error) {
+	root = filepath.Clean(root)
+	restPath := filepath.Clean(filepath.FromSlash(strings.TrimSpace(rest)))
+	if strings.HasPrefix(restPath, "..") {
+		return "", fmt.Errorf("invalid relative path")
+	}
+	if restPath == "." {
+		return root, nil
+	}
+	abs = filepath.Join(root, restPath)
+	abs = filepath.Clean(abs)
+	relCheck, err := filepath.Rel(root, abs)
+	if err != nil || strings.HasPrefix(relCheck, "..") {
+		return "", fmt.Errorf("path escapes root")
+	}
+	return abs, nil
+}
+
 func (s *Store) resolveReadable(rel string) (abs string, err error) {
 	rel = strings.TrimSpace(rel)
 	rel = filepath.ToSlash(rel)
@@ -228,28 +278,96 @@ func (s *Store) resolveReadable(rel string) (abs string, err error) {
 	if len(parts) != 2 {
 		return "", fmt.Errorf("path must be scope:relative form, got %q", rel)
 	}
-	root := ""
-	switch parts[0] {
-	case "global":
-		root = s.globalRoot
-	case "project":
-		root = s.projectRoot
-	default:
-		return "", fmt.Errorf("unknown scope %q", parts[0])
+	_, root, err := s.resolveScopeRoot(parts[0])
+	if err != nil {
+		return "", err
 	}
-	rest := filepath.FromSlash(parts[1])
-	rest = filepath.Clean(rest)
-	if strings.HasPrefix(rest, "..") {
-		return "", fmt.Errorf("invalid relative path")
+	return joinUnderRoot(root, parts[1])
+}
+
+// resolveDirAbs returns absolute directory under a memory scope root. inner empty means scope root directory.
+func (s *Store) resolveDirAbs(scopeLabel, inner string) (abs string, err error) {
+	_, root, err := s.resolveScopeRoot(scopeLabel)
+	if err != nil {
+		return "", err
 	}
-	abs = filepath.Join(root, rest)
-	abs = filepath.Clean(abs)
-	rootClean := filepath.Clean(root)
-	rel2, err := filepath.Rel(rootClean, abs)
-	if err != nil || strings.HasPrefix(rel2, "..") {
-		return "", fmt.Errorf("path escapes root")
+	return joinUnderRoot(root, inner)
+}
+
+// ListEntry is one row in a flat directory listing.
+type ListEntry struct {
+	Name     string `json:"name"`
+	Kind     string `json:"kind"`
+	Size     int64  `json:"size,omitempty"`
+	Modified string `json:"modified,omitempty"`
+}
+
+// ListOneLevel lists immediate children under scope-relative directory inner (empty string = scope root).
+func (s *Store) ListOneLevel(scopeLabel, inner string) ([]ListEntry, error) {
+	dirAbs, err := s.resolveDirAbs(scopeLabel, inner)
+	if err != nil {
+		return nil, err
 	}
-	return abs, nil
+	if err := os.MkdirAll(dirAbs, 0o755); err != nil {
+		return nil, err
+	}
+	fi, err := os.Stat(dirAbs)
+	if err != nil {
+		return nil, err
+	}
+	if !fi.IsDir() {
+		return nil, fmt.Errorf("not a directory")
+	}
+	de, err := os.ReadDir(dirAbs)
+	if err != nil {
+		return nil, err
+	}
+	var nodes []ListEntry
+	for _, e := range de {
+		name := e.Name()
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.IsDir() {
+			nodes = append(nodes, ListEntry{Name: name, Kind: "dir", Modified: info.ModTime().UTC().Format(time.RFC3339)})
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(name))
+		if ext != ".md" && ext != ".txt" {
+			continue
+		}
+		nodes = append(nodes, ListEntry{Name: name, Kind: "file", Size: info.Size(), Modified: info.ModTime().UTC().Format(time.RFC3339)})
+	}
+	return nodes, nil
+}
+
+// Mkdir creates directories under scope (idempotent via MkdirAll).
+func (s *Store) Mkdir(scopeLabel, innerDir string) error {
+	dirAbs, err := s.resolveDirAbs(scopeLabel, innerDir)
+	if err != nil {
+		return err
+	}
+	return s.ensureDir(dirAbs)
+}
+
+func validateMemoryLeafPath(innerFile string) error {
+	innerFile = filepath.ToSlash(strings.TrimSpace(innerFile))
+	if innerFile == "" || innerFile == "." {
+		return fmt.Errorf("missing file path")
+	}
+	if strings.Contains(innerFile, "..") {
+		return fmt.Errorf("invalid path")
+	}
+	base := filepath.Base(innerFile)
+	ext := strings.ToLower(filepath.Ext(base))
+	if ext != ".md" && ext != ".txt" {
+		return fmt.Errorf("memory file must end with .md or .txt")
+	}
+	return nil
 }
 
 // Read returns file contents for a scope:relative path.
@@ -290,31 +408,65 @@ func slugify(title string) string {
 	return s
 }
 
-// Write saves markdown body under the given scope with a filename derived from title.
+// Write saves markdown body under the given scope with a filename derived from title (flat layout).
 func (s *Store) Write(scope, title, body string) (writtenPath string, err error) {
+	return s.WriteFlexible(scope, title, "", body)
+}
+
+// WriteFlexible writes body under scope. When relativeInner is empty, filename is slugify(title)+".md" at scope root.
+// Otherwise relativeInner is path under scope root, e.g. design/auth-flow.md (.md or .txt only).
+func (s *Store) WriteFlexible(scope, title, relativeInner, body string) (writtenPath string, err error) {
 	scope = strings.ToLower(strings.TrimSpace(scope))
-	var root string
-	switch scope {
-	case "global":
-		root = s.globalRoot
-	case "project":
-		root = s.projectRoot
-	default:
-		return "", fmt.Errorf("scope must be global or project")
+	lab, root, err := s.resolveScopeRoot(scope)
+	if err != nil {
+		return "", err
 	}
 	if err := s.ensureDir(root); err != nil {
 		return "", err
 	}
-	name := slugify(title) + ".md"
-	abs := filepath.Join(root, name)
-	if err := os.WriteFile(abs, []byte(strings.TrimSpace(body)+"\n"), 0o644); err != nil {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return "", fmt.Errorf("empty body")
+	}
+	content := []byte(body + "\n")
+
+	relInner := strings.TrimSpace(filepath.ToSlash(relativeInner))
+	rootClean := filepath.Clean(root)
+
+	var abs string
+	if relInner == "" {
+		name := slugify(title) + ".md"
+		abs = filepath.Join(root, name)
+	} else {
+		if err := validateMemoryLeafPath(relInner); err != nil {
+			return "", err
+		}
+		relInnerClean := filepath.Clean(filepath.FromSlash(relInner))
+		if strings.HasPrefix(relInnerClean, "..") || strings.Contains(filepath.ToSlash(relInnerClean), "/../") {
+			return "", fmt.Errorf("invalid relative_path")
+		}
+		parent := filepath.Dir(relInnerClean)
+		if parent != "." {
+			if err := s.ensureDir(filepath.Join(root, parent)); err != nil {
+				return "", err
+			}
+		}
+		candidate := filepath.Join(root, relInnerClean)
+		candidate = filepath.Clean(candidate)
+		relProbe, err := filepath.Rel(rootClean, candidate)
+		if err != nil || strings.HasPrefix(relProbe, "..") {
+			return "", fmt.Errorf("path escapes root")
+		}
+		abs = candidate
+	}
+	if err := os.WriteFile(abs, content, 0o644); err != nil {
 		return "", err
 	}
-	rel, err := filepath.Rel(root, abs)
+	toShow, err := filepath.Rel(rootClean, abs)
 	if err != nil {
-		return scope + ":" + name, nil
+		return lab + ":" + filepath.Base(abs), nil
 	}
-	return scope + ":" + filepath.ToSlash(rel), nil
+	return lab + ":" + filepath.ToSlash(toShow), nil
 }
 
 // Delete removes a memory file by scope:relative path.

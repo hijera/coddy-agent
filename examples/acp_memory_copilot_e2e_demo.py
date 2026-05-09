@@ -342,9 +342,15 @@ def main() -> None:
             sys.exit(1)
         text2 = collect_assistant_text(backlog2)
         print("--- assistant turn 2 ---\n", text2, "\n", file=sys.stderr, sep="")
-        time.sleep(1.0)
-        after_paths = set(list_memory_markdown(global_mem, project_mem))
-        blob = read_all_memory_text(list(after_paths)).upper()
+        after_paths: set[Path] = set()
+        blob = ""
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            after_paths = set(list_memory_markdown(global_mem, project_mem))
+            blob = read_all_memory_text(list(after_paths)).upper()
+            if fruit_word.upper() in blob:
+                break
+            time.sleep(0.25)
         if fruit_word.upper() not in blob:
             print(
                 f"FAIL: codeword {fruit_word} not found under memory dirs after turn 2 "

@@ -56,7 +56,8 @@ def sse_events(resp: Any) -> Iterable[tuple[str, str]]:
 
 def main() -> int:
     base = os.environ.get("BASE_URL", "http://127.0.0.1:19876/v1").rstrip("/")
-    model = os.environ.get("MODEL", "rpa/gpt-oss:120b").strip()
+    yaml_model = os.environ.get("MODEL", "rpa/gpt-oss:120b").strip()
+    profile = os.environ.get("CODDY_CHAT_PROFILE", "agent").strip()
     work = Path(os.environ.get("WORK_DIR", "")).resolve()
     home = Path(os.environ.get("CODDY_HOME", "")).resolve()
     if not work.is_dir() or not home.is_dir():
@@ -77,8 +78,9 @@ STEP 2 - Reply single line OK when done.
 """
 
     body = {
-        "model": model,
+        "model": profile,
         "stream": True,
+        "metadata": {"model": yaml_model},
         "input": prompt,
     }
 

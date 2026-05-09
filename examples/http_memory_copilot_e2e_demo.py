@@ -38,7 +38,8 @@ def assistant_text(chat_completion: dict[str, Any]) -> str:
 
 def main() -> int:
     base = os.environ.get("BASE_URL", "http://127.0.0.1:19876/v1").rstrip("/")
-    model = os.environ.get("MODEL", "rpa/gpt-oss:120b").strip()
+    yaml_model = os.environ.get("MODEL", "rpa/gpt-oss:120b").strip()
+    profile = os.environ.get("CODDY_CHAT_PROFILE", "agent").strip()
     work = Path(os.environ.get("WORK_DIR", "")).resolve()
     home = Path(os.environ.get("CODDY_HOME", "")).resolve()
     if not work.is_dir() or not home.is_dir():
@@ -58,7 +59,12 @@ def main() -> int:
     code, cc1, headers = http_json(
         "POST",
         f"{base}/chat/completions",
-        {"model": model, "stream": False, "messages": [{"role": "user", "content": "Say 'ready' only."}]},
+        {
+            "model": profile,
+            "stream": False,
+            "metadata": {"model": yaml_model},
+            "messages": [{"role": "user", "content": "Say 'ready' only."}],
+        },
         {},
     )
     if code != 200:
@@ -73,8 +79,9 @@ def main() -> int:
         "POST",
         f"{base}/chat/completions",
         {
-            "model": model,
+            "model": profile,
             "stream": False,
+            "metadata": {"model": yaml_model},
             "messages": [
                 {
                     "role": "user",

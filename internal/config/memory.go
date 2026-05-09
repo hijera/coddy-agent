@@ -19,7 +19,7 @@ type MemoryConfig struct {
 	// RecallMaxTurns caps tool rounds for the recall sub-agent.
 	RecallMaxTurns int `yaml:"recall_max_turns"`
 
-	// PersistMaxTurns caps tool rounds after the judge approves saving (normally 1).
+	// PersistMaxTurns caps LLM rounds in the persist tool loop (directory navigation + save needs several steps for some backends).
 	PersistMaxTurns int `yaml:"persist_max_turns"`
 
 	// CopilotMaxTokens limits completion size for memory LLM calls.
@@ -44,7 +44,7 @@ func (m *MemoryConfig) ApplyDefaults() {
 		m.RecallMaxTurns = 6
 	}
 	if m.PersistMaxTurns <= 0 {
-		m.PersistMaxTurns = 4
+		m.PersistMaxTurns = 12
 	}
 	if m.CopilotMaxTokens <= 0 {
 		m.CopilotMaxTokens = 4096

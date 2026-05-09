@@ -91,7 +91,9 @@ sessions:
 # Implementation is always linked; enable at runtime with memory.enabled.
 memory:
   enabled: false
-  model: "" # optional models[] selector; empty uses agent.model / session override
+  # Exact id from models[]. Used only for recall and persist tool-calling passes, not for the main assistant model.
+  # Example: "rpa/gpt-oss:120b". Empty means fall back to agent.model / session override.
+  model: ""
   dir: "" # long-term memory root; empty = $CODDY_HOME/memory. Supports ${CODDY_HOME} and ~ when set.
   recall_max_turns: 6
   persist_max_turns: 4

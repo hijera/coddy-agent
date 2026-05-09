@@ -169,7 +169,14 @@ export function NavRail(props: {
             </div>
 
             <div className="rail-tip-host">
-              <a className={navLinkCls} href="/docs/" aria-label="API documentation" data-testid="nav-api-docs">
+              <a
+                className={navLinkCls}
+                href="/docs/"
+                target="_blank"
+                rel="noopener"
+                aria-label="API documentation"
+                data-testid="nav-api-docs"
+              >
                 <IconApi className="rail-svg rail-nav-hit-svg" />
                 {pillWide ? <span className="rail-nav-label">API docs</span> : null}
               </a>

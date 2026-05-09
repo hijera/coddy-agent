@@ -8,6 +8,18 @@
   --bubble-user: #2d2d2d;
   --radius: 14px;
   --shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+  /* Narrow nav column: outer edge = pill + trailing column padding before chat/drawer */
+  --rail-column-pad-end: 8px;
+  --nav-floating-gutter: 2px;
+  --rail-pill-track: 74px;
+  /* Matches .rail-pill horizontal padding (box-sizing border-box width includes this) */
+  --rail-pill-pad-inline: 10px;
+}
+
+@media (min-width: 761px) {
+  :root {
+    --rail-pill-track: 76px;
+  }
 }
 
 * {
@@ -193,6 +205,12 @@ body {
   .rail-pill:not(.is-wide) .rail-middle {
     align-items: center;
   }
+
+  .rail-pill:not(.is-wide) .rail-tip-host {
+    align-self: stretch;
+    width: 100%;
+    max-width: 100%;
+  }
 }
 
 .rail-link-stack {
@@ -215,7 +233,14 @@ body {
 
 .rail-tip {
   position: absolute;
-  left: calc(100% + 12px);
+  /*
+    Align left edge with sessions.drawer: .rail-tip-host is only as wide as the hit area when
+    .rail-middle uses align-items center, so 100% is the inner content width (~track - 2*pad).
+    Outer pill right edge matches drawer math (track + pad + gutter). +1px accounts for pill border on the content box edge.
+  */
+  left: calc(
+    100% + var(--rail-pill-pad-inline) + var(--rail-column-pad-end) + var(--nav-floating-gutter) + 1px
+  );
   top: 50%;
   transform: translateY(-50%);
   padding: 6px 12px;
@@ -236,6 +261,12 @@ body {
 .rail-tip-host:hover .rail-tip,
 .rail-tip-host:focus-within .rail-tip {
   opacity: 1;
+}
+
+.rail-tip-host:has(.is-active) .rail-tip,
+.rail-tip-host:has(.is-active):hover .rail-tip,
+.rail-tip-host:has(.is-active):focus-within .rail-tip {
+  opacity: 0;
 }
 
 .rail-pill.is-wide .rail-tip {
@@ -463,9 +494,11 @@ body {
   position: fixed;
   top: 14px;
   bottom: 14px;
-  /* Narrow rail: pill (74px base) + column padding-inline-end + 2px gutter */
-  left: calc(74px + 8px + 2px);
-  width: min(320px, calc(100vw - 74px - 8px - 2px - 16px));
+  left: calc(var(--rail-pill-track) + var(--rail-column-pad-end) + var(--nav-floating-gutter));
+  width: min(
+    320px,
+    calc(100vw - var(--rail-pill-track) - var(--rail-column-pad-end) - var(--nav-floating-gutter) - 16px)
+  );
   border-radius: 18px;
   background: var(--sidebar);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1474,13 +1507,6 @@ textarea#composer {
 .composer-send:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-@media (min-width: 761px) {
-  .sessions.drawer {
-    left: calc(76px + 8px + 2px);
-    width: min(320px, calc(100vw - 76px - 8px - 2px - 16px));
-  }
 }
 
 /* Desktop */

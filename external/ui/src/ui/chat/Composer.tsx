@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { TokenUsage } from './types';
-import { slashMenuDraftAtCaret } from '../skills/draftSlash';
-import {
-  segmentComposerSlashSpans,
-  segmentComposerSlashSpansForcedPlainRange,
-} from '../skills/segmentComposerSlashSpans';
+import { draftExtendsFailedSlashPrefix, slashMenuDraftAtCaret } from '../skills/draftSlash';
+import { segmentComposerMirrorSpans } from '../skills/composerMirrorSegments';
 
 function clamp01(x: number): number {
   if (!Number.isFinite(x)) return 0;
@@ -64,7 +61,8 @@ export function Composer(props: {
   const composerFieldWrapRef = useRef<HTMLDivElement | null>(null);
   const mirrorInnerRef = useRef<HTMLDivElement | null>(null);
   const [composerScrollTop, setComposerScrollTop] = useState(0);
-  const debounceSlashRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Bump when the slash draft changes or is dismissed so stale list responses are ignored. */
+  const slashFetchGenRef = useRef(0);
   const [mobileUi, setMobileUi] = useState(false);
   const [slashItems, setSlashItems] = useState<SlashRow[]>([]);
   const [slashOpen, setSlashOpen] = useState(false);
@@ -75,7 +73,7 @@ export function Composer(props: {
   const [slashHasMore, setSlashHasMore] = useState(false);
   const [slashReplace, setSlashReplace] = useState<{ from: number; to: number } | null>(null);
   const [slashFloatRect, setSlashFloatRect] = useState<SlashFloatRect | null>(null);
-  /** Server returned zero rows for this `/` + prefix; hide picker and skill chip until the token changes. */
+  /** Server returned zero rows for failed `prefix`; hide picker/chip while the user extends that prefix at the same `/`. */
   const [slashNoMatch, setSlashNoMatch] = useState<{ slashIdx: number; prefix: string } | null>(null);
   const [caretPos, setCaretPos] = useState(0);
 
@@ -134,11 +132,8 @@ export function Composer(props: {
     return () => mq.removeEventListener('change', apply);
   }, []);
 
-  const cancelSlashDebounce = () => {
-    if (debounceSlashRef.current) {
-      clearTimeout(debounceSlashRef.current);
-      debounceSlashRef.current = null;
-    }
+  const bumpSlashFetchGen = () => {
+    slashFetchGenRef.current++;
   };
 
   const fetchSlashPage = useCallback(
@@ -172,93 +167,88 @@ export function Composer(props: {
     (value: string, caret: number) => {
       const draft = slashMenuDraftAtCaret(value, caret);
       if (!draft.open) {
-        cancelSlashDebounce();
+        bumpSlashFetchGen();
         setSlashOpen(false);
         setSlashReplace(null);
         setSlashNoMatch(null);
+        setSlashLoading(false);
         return;
       }
-      if (
-        slashNoMatch &&
-        slashNoMatch.slashIdx === draft.slashIdx &&
-        slashNoMatch.prefix === draft.prefix
-      ) {
-        cancelSlashDebounce();
+      if (slashNoMatch && draftExtendsFailedSlashPrefix(draft, slashNoMatch)) {
+        bumpSlashFetchGen();
         setSlashOpen(false);
         setSlashReplace(null);
+        setSlashLoading(false);
         return;
       }
       setSlashOpen(true);
       setSlashReplace({ from: draft.slashIdx, to: draft.caret });
       setSlashPrefix(draft.prefix);
-      cancelSlashDebounce();
-      debounceSlashRef.current = setTimeout(() => {
-        debounceSlashRef.current = null;
-        void (async () => {
-          const el = taRef.current;
-          const now = el
-            ? slashMenuDraftAtCaret(el.value, el.selectionStart ?? el.value.length)
-            : null;
-          if (!now || !now.open || now.slashIdx !== draft.slashIdx || now.prefix !== draft.prefix) {
+      slashFetchGenRef.current += 1;
+      const gen = slashFetchGenRef.current;
+      void (async () => {
+        const el = taRef.current;
+        const now = el ? slashMenuDraftAtCaret(el.value, el.selectionStart ?? el.value.length) : null;
+        if (
+          gen !== slashFetchGenRef.current ||
+          !now ||
+          !now.open ||
+          now.slashIdx !== draft.slashIdx ||
+          now.prefix !== draft.prefix
+        ) {
+          return;
+        }
+        setSlashLoading(true);
+        setSlashErr(null);
+        try {
+          const body = await fetchSlashPage(now.prefix, 1);
+          if (gen !== slashFetchGenRef.current) {
             return;
           }
-          setSlashLoading(true);
-          setSlashErr(null);
-          try {
-            const body = await fetchSlashPage(now.prefix, 1);
-            const el2 = taRef.current;
-            const after = el2
-              ? slashMenuDraftAtCaret(el2.value, el2.selectionStart ?? el2.value.length)
-              : null;
-            if (
-              !after ||
-              !after.open ||
-              after.slashIdx !== now.slashIdx ||
-              after.prefix !== now.prefix
-            ) {
-              return;
-            }
-            const rows = body.items || [];
-            setSlashItems(rows);
-            setSlashPage(1);
-            setSlashHasMore(!!body.has_more);
-            if (rows.length === 0) {
-              setSlashNoMatch({ slashIdx: after.slashIdx, prefix: after.prefix });
-              setSlashOpen(false);
-              setSlashReplace(null);
-            } else {
-              setSlashNoMatch(null);
-            }
-          } catch (e) {
-            setSlashErr(e instanceof Error ? e.message : 'request failed');
-            setSlashItems([]);
-            setSlashHasMore(false);
+          const el2 = taRef.current;
+          const after = el2 ? slashMenuDraftAtCaret(el2.value, el2.selectionStart ?? el2.value.length) : null;
+          if (
+            !after ||
+            !after.open ||
+            after.slashIdx !== now.slashIdx ||
+            after.prefix !== now.prefix
+          ) {
+            return;
+          }
+          const rows = body.items || [];
+          setSlashItems(rows);
+          setSlashPage(1);
+          setSlashHasMore(!!body.has_more);
+          if (rows.length === 0) {
+            setSlashNoMatch({ slashIdx: after.slashIdx, prefix: after.prefix });
+            setSlashOpen(false);
+            setSlashReplace(null);
+          } else {
             setSlashNoMatch(null);
-          } finally {
+          }
+        } catch (e) {
+          if (gen !== slashFetchGenRef.current) {
+            return;
+          }
+          setSlashErr(e instanceof Error ? e.message : 'request failed');
+          setSlashItems([]);
+          setSlashHasMore(false);
+          setSlashNoMatch(null);
+        } finally {
+          if (gen === slashFetchGenRef.current) {
             setSlashLoading(false);
           }
-        })();
-      }, 100);
+        }
+      })();
     },
     [fetchSlashPage, slashNoMatch],
   );
 
-  useEffect(() => () => cancelSlashDebounce(), []);
-
   const maskComposerText = props.value.length > 0;
-  const composerSegments = useMemo(() => {
-    const draft = slashMenuDraftAtCaret(props.value, caretPos);
-    if (
-      slashNoMatch &&
-      draft.open &&
-      draft.slashIdx === slashNoMatch.slashIdx &&
-      draft.prefix === slashNoMatch.prefix
-    ) {
-      const to = slashNoMatch.slashIdx + 1 + slashNoMatch.prefix.length;
-      return segmentComposerSlashSpansForcedPlainRange(props.value, slashNoMatch.slashIdx, to);
-    }
-    return segmentComposerSlashSpans(props.value);
-  }, [props.value, caretPos, slashNoMatch]);
+  const composerSegments = useMemo(
+    () => segmentComposerMirrorSpans(props.value, caretPos, slashNoMatch),
+    [props.value, caretPos, slashNoMatch],
+  );
 
   useLayoutEffect(() => {
     const el = taRef.current;
@@ -320,7 +310,8 @@ export function Composer(props: {
     setSlashOpen(false);
     setSlashReplace(null);
     setSlashNoMatch(null);
-    cancelSlashDebounce();
+    bumpSlashFetchGen();
+    setSlashLoading(false);
     requestAnimationFrame(() => {
       const el = taRef.current;
       if (!el) {
@@ -343,13 +334,10 @@ export function Composer(props: {
         const nextPage = slashPage + 1;
         const body = await fetchSlashPage(slashPrefix, nextPage);
         const more = body.items || [];
-        setSlashItems((prev) => {
-          const merged = [...prev, ...more];
-          if (merged.length > 0) {
-            setSlashNoMatch(null);
-          }
-          return merged;
-        });
+        setSlashItems((prev) => [...prev, ...more]);
+        if (more.length > 0) {
+          setSlashNoMatch(null);
+        }
         setSlashPage(nextPage);
         setSlashHasMore(!!body.has_more);
       } catch (e) {
@@ -453,11 +441,13 @@ export function Composer(props: {
             type="button"
             className="slash-sheet-backdrop"
             aria-label="Close slash commands"
-            onMouseDown={(e) => {
+              onMouseDown={(e) => {
               e.preventDefault();
               setSlashOpen(false);
               setSlashReplace(null);
-              cancelSlashDebounce();
+              setSlashNoMatch(null);
+              bumpSlashFetchGen();
+              setSlashLoading(false);
             }}
           />
         ) : null}
@@ -498,6 +488,7 @@ export function Composer(props: {
               onChange={(ev) => {
                 const v = ev.target.value;
                 const caret = ev.target.selectionStart ?? v.length;
+                setCaretPos(caret);
                 props.onChange(v);
                 updateSlashMenu(v, caret);
               }}
@@ -507,6 +498,7 @@ export function Composer(props: {
                 if (!el) {
                   return;
                 }
+                setCaretPos(el.selectionStart ?? el.value.length);
                 if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight' || ev.key === 'Home' || ev.key === 'End') {
                   updateSlashMenu(props.value, el.selectionStart);
                 }
@@ -514,6 +506,7 @@ export function Composer(props: {
               onSelect={() => {
                 const el = taRef.current;
                 if (el) {
+                  setCaretPos(el.selectionStart ?? el.value.length);
                   updateSlashMenu(props.value, el.selectionStart);
                   syncComposerScroll();
                 }
@@ -521,6 +514,7 @@ export function Composer(props: {
               onClick={() => {
                 const el = taRef.current;
                 if (el) {
+                  setCaretPos(el.selectionStart ?? el.value.length);
                   updateSlashMenu(props.value, el.selectionStart);
                   syncComposerScroll();
                 }
@@ -530,7 +524,9 @@ export function Composer(props: {
                   ev.preventDefault();
                   setSlashOpen(false);
                   setSlashReplace(null);
-                  cancelSlashDebounce();
+                  setSlashNoMatch(null);
+                  bumpSlashFetchGen();
+                  setSlashLoading(false);
                   return;
                 }
                 if (ev.key === 'Enter' && !ev.shiftKey && slashOpen && slashItems.length > 0 && !props.generating) {

@@ -22,6 +22,25 @@ export type SlashMenuDraft =
   | { open: true; lineStart: number; slashIdx: number; caret: number; prefix: string };
 
 /**
+ * True while the caret stays in a slash token whose prefix cannot match any command:
+ * API returned zero rows for `failed.prefix`; with a typical prefix filter, any longer
+ * continuation still matches nothing. Empty `failed.prefix` means the catalog had no
+ * commands for this `/` probe, so suppress at the same slash until the user edits away.
+ */
+export function draftExtendsFailedSlashPrefix(
+  draft: SlashMenuDraft,
+  failed: { slashIdx: number; prefix: string },
+): boolean {
+  if (!draft.open || draft.slashIdx !== failed.slashIdx) {
+    return false;
+  }
+  if (failed.prefix === '') {
+    return true;
+  }
+  return draft.prefix === failed.prefix || draft.prefix.startsWith(failed.prefix);
+}
+
+/**
  * When the current line ends (before caret) with optional spaces then `/` + optional name token,
  * with `/` preceded by line start or whitespace, returns picker state after `/`.
  */

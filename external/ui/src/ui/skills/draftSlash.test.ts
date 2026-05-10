@@ -1,5 +1,9 @@
 import { expect, test } from 'vitest';
-import { inMarkdownFenceBeforeCaret, slashMenuDraftAtCaret } from './draftSlash';
+import {
+  draftExtendsFailedSlashPrefix,
+  inMarkdownFenceBeforeCaret,
+  slashMenuDraftAtCaret,
+} from './draftSlash';
 
 test('slashMenuDraftAtCaret basic prefix', () => {
   const s = slashMenuDraftAtCaret('/ab', 3);
@@ -36,4 +40,29 @@ test('inMarkdownFenceBeforeCaret toggles on closed lines only', () => {
   const text = '```\nx\n';
   const caretAfterOpen = text.length;
   expect(inMarkdownFenceBeforeCaret(text, caretAfterOpen)).toBe(true);
+});
+
+test('draftExtendsFailedSlashPrefix extends longer token after failed prefix', () => {
+  const s = '/adfadsfgaf';
+  const d = slashMenuDraftAtCaret(s, s.length);
+  if (!d.open) {
+    throw new Error('expected open');
+  }
+  expect(draftExtendsFailedSlashPrefix(d, { slashIdx: 0, prefix: 'adf' })).toBe(true);
+});
+
+test('draftExtendsFailedSlashPrefix false when user shortened below failed prefix', () => {
+  const d = slashMenuDraftAtCaret('/ad', 3);
+  if (!d.open) {
+    throw new Error('expected open');
+  }
+  expect(draftExtendsFailedSlashPrefix(d, { slashIdx: 0, prefix: 'adf' })).toBe(false);
+});
+
+test('draftExtendsFailedSlashPrefix empty failed prefix matches any token at slash', () => {
+  const d = slashMenuDraftAtCaret('/hello', 6);
+  if (!d.open) {
+    throw new Error('expected open');
+  }
+  expect(draftExtendsFailedSlashPrefix(d, { slashIdx: 0, prefix: '' })).toBe(true);
 });

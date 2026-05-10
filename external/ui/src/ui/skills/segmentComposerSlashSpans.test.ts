@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import {
   segmentComposerSlashSpans,
+  segmentComposerSlashSpansForcedPlainRange,
   slugSlashesForUserBubbleMarkdown,
   stripCoddySkillMarkdownLinks,
 } from './segmentComposerSlashSpans';
@@ -22,6 +23,18 @@ test('segmentComposerSlashSpans line start slash', () => {
 
 test('segmentComposerSlashSpans skips letter before slash', () => {
   expect(segmentComposerSlashSpans('x/foo')).toEqual([{ type: 'text', value: 'x/foo' }]);
+});
+
+test('segmentComposerSlashSpansForcedPlainRange turns token into plain text', () => {
+  expect(segmentComposerSlashSpansForcedPlainRange('/as', 0, 3)).toEqual([{ type: 'text', value: '/as' }]);
+});
+
+test('segmentComposerSlashSpansForcedPlainRange mid line', () => {
+  expect(segmentComposerSlashSpansForcedPlainRange('pre /as suf', 4, 7)).toEqual([
+    { type: 'text', value: 'pre ' },
+    { type: 'text', value: '/as' },
+    { type: 'text', value: ' suf' },
+  ]);
 });
 
 test('stripCoddySkillMarkdownLinks restores plain slash token', () => {

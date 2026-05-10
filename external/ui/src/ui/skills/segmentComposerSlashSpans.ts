@@ -66,6 +66,9 @@ export function segmentComposerSlashSpansForcedPlainRange(
     return segmentComposerSlashSpans(value);
   }
   const end = Math.min(plainToExclusive, n);
+  if (plainFrom === 0 && end === n && n > 0) {
+    return [{ type: 'text', value }];
+  }
   const a = value.slice(0, plainFrom);
   const b = value.slice(plainFrom, end);
   const c = value.slice(end);

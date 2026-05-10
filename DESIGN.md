@@ -105,7 +105,7 @@ Captured via SSE (**`tool_call`**, **`tool_call_update`**). Rendered compact gre
 Tool cards must include tool name, status, arguments, and result.
 
 - Tool arguments arrive via `tool_call_update` status `in_progress` where `content[0].content.text` is raw JSON args.
-- Tool result arrives via `tool_call_update` status `completed` or `failed` where `content[0].content.text` is capped to the first **10 lines** plus **`...`** when longer; **`_meta.coddy.toolResultPreview`** marks truncation. Full text loads only when the user clicks **Load full output** (GET `/coddy/sessions/{id}/tool-calls/{toolCallId}`, which always returns the saved result).
+- Tool result arrives via `tool_call_update` status `completed` or `failed` where `content[0].content.text` matches the HTTP user preview rules (**raw** text, **no Markdown**): the first **19** content lines, then a twentieth row that is only **`...`**, when the output is longer; **`_meta.coddy.toolResultPreview`** marks truncation. Outputs that are not truncated skip the fixed-height viewport and **Load more** (natural-height grey mono panel). When truncated, the fixed-height panel shows the clipped preview with **no vertical scrollbar**. A text link **Load more results** (not a filled button) performs **GET `/coddy/sessions/{id}/tool-calls/{toolCallId}`** once, fills the same panel with the full saved body at the same max height, enables **overflow-y** scrolling, and turns the link into **Hide**. **Hide** restores the clipped preview without another request while the full text stays in memory for this session.
 
 Tool call history is persisted per session under `tool_calls/` so it can be restored after restart.
 
@@ -124,7 +124,7 @@ Current block types:
   - Multiple `thinking` blocks can appear in one user turn. If the model resumes reasoning after tool calls, the UI starts a new `thinking` block and preserves ordering.
 - `tool_call`
   - Tool execution timeline block (SSE `tool_call` and `tool_call_update`, enriched from `/coddy/sessions/{id}/tool-calls`).
-  - Summary row stays compact; details show args and streamed result preview. **Load full output** fetches the complete result from the Coddy REST helper (not on expand alone).
+  - Summary row stays compact; details show args and tool **result**. Results are **raw plain text** in a monospace, muted grey panel (**no Markdown**). When **`resultWasTruncated`** is false (output fits the preview cap), the result block grows with content only (no fixed tall viewport, no **Load more results**). When truncated, the capped viewport and **Load more results** / **Hide** match the tool timeline above (REST fetch only on first **Load more results**).
   - Duration label is computed from persisted `tool_calls/<id>/meta.json` `startedAt` and `finishedAt` when available.
 - `assistant_message`
   - Final assistant output for the turn. UI keeps it last and backfills it from `/coddy/sessions/{id}/messages` when streaming ends.

@@ -2,8 +2,8 @@ package session
 
 import "strings"
 
-// ToolHTTPUserPreviewLines is max lines streamed to Coddy HTTP (SSE) and in tool-call list previews. Longer tool output loads via GET …/tool-calls/{id} when the user expands.
-const ToolHTTPUserPreviewLines = 10
+// ToolHTTPUserPreviewContentLines is how many real output lines appear before the final "..." row in HTTP/SSE previews (20 visible rows total: 19 data + ellipsis).
+const ToolHTTPUserPreviewContentLines = 19
 
 func normalizeLines(s string) string {
 	s = strings.ReplaceAll(s, "\r\n", "\n")
@@ -11,10 +11,11 @@ func normalizeLines(s string) string {
 	return s
 }
 
-// PreviewToolOutputForHTTPUser returns the first maxLines lines; if the body has more lines, appends a newline and "...".
-func PreviewToolOutputForHTTPUser(full string, maxLines int) (display string, totalLines int, truncated bool) {
-	if maxLines < 1 {
-		maxLines = ToolHTTPUserPreviewLines
+// PreviewToolOutputForHTTPUser returns the first ToolHTTPUserPreviewContentLines lines; if output is longer, appends one more row "..." so the transcript shows 20 lines before expansion.
+func PreviewToolOutputForHTTPUser(full string) (display string, totalLines int, truncated bool) {
+	n := ToolHTTPUserPreviewContentLines
+	if n < 1 {
+		n = 19
 	}
 	norm := strings.TrimRight(normalizeLines(full), "\n")
 	if norm == "" {
@@ -22,14 +23,14 @@ func PreviewToolOutputForHTTPUser(full string, maxLines int) (display string, to
 	}
 	lines := strings.Split(norm, "\n")
 	totalLines = len(lines)
-	if totalLines <= maxLines {
+	if totalLines <= n {
 		return full, totalLines, false
 	}
-	return strings.Join(lines[:maxLines], "\n") + "\n...", totalLines, true
+	return strings.Join(lines[:n], "\n") + "\n...", totalLines, true
 }
 
-func toolResultPreviewMeta(truncated bool, totalLines, previewLines int) map[string]interface{} {
-	if !truncated || totalLines <= previewLines {
+func toolResultPreviewMeta(truncated bool, totalLines, contentLines int) map[string]interface{} {
+	if !truncated || totalLines <= contentLines {
 		return nil
 	}
 	return map[string]interface{}{
@@ -37,20 +38,20 @@ func toolResultPreviewMeta(truncated bool, totalLines, previewLines int) map[str
 			"toolResultPreview": map[string]interface{}{
 				"truncated":    true,
 				"totalLines":   totalLines,
-				"previewLines": previewLines,
+				"previewLines": contentLines,
 			},
 		},
 	}
 }
 
-// PreviewToolResultForSessionUpdate trims tool output for ACP/SSE (first lines + "..."). The model still receives the full string in RoleTool messages.
+// PreviewToolResultForSessionUpdate trims tool output for ACP/SSE. The model still receives the full string in RoleTool messages.
 func PreviewToolResultForSessionUpdate(_ /* toolName */, fullResult string) (display string, meta map[string]interface{}) {
-	prev, tl, trunc := PreviewToolOutputForHTTPUser(fullResult, ToolHTTPUserPreviewLines)
-	return prev, toolResultPreviewMeta(trunc, tl, ToolHTTPUserPreviewLines)
+	prev, tl, trunc := PreviewToolOutputForHTTPUser(fullResult)
+	return prev, toolResultPreviewMeta(trunc, tl, ToolHTTPUserPreviewContentLines)
 }
 
-// PreviewToolResultSnippet matches PreviewToolResultForSessionUpdate (for Coddy REST list rows).
+// PreviewToolResultSnippet matches PreviewToolResultForSessionUpdate (Coddy REST list rows).
 func PreviewToolResultSnippet(_ /* toolName */, full string) (snippet string, truncated bool, totalLines int) {
-	snip, tl, trunc := PreviewToolOutputForHTTPUser(full, ToolHTTPUserPreviewLines)
+	snip, tl, trunc := PreviewToolOutputForHTTPUser(full)
 	return snip, trunc, tl
 }

@@ -24,7 +24,8 @@ export function ChatScreen(props: {
   onSend: (text: string) => void;
   generating?: boolean;
   onStop?: () => void;
-  onLoadToolCallDetails?: (toolCallId: string) => void;
+  /** Fetch persisted full tool output; UI keeps preview in resultText. */
+  onFetchToolCallFull?: (toolCallId: string) => Promise<void>;
 }) {
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const composerHostRef = useRef<HTMLDivElement | null>(null);
@@ -107,7 +108,7 @@ export function ChatScreen(props: {
             <div className="messages-inner">
               <MessageList
                 items={props.items}
-                {...(props.onLoadToolCallDetails ? { onLoadToolCallDetails: props.onLoadToolCallDetails } : {})}
+                {...(props.onFetchToolCallFull ? { onFetchToolCallFull: props.onFetchToolCallFull } : {})}
               />
             </div>
             <div className="chat-scroll-tail" aria-hidden />

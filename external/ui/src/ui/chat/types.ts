@@ -32,10 +32,12 @@ export type TranscriptItem =
       kind?: string;
       status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
       argsText?: string;
+      /** Truncated preview from SSE or list endpoint (never replace with full body). */
       resultText?: string;
-      /** True when SSE or list preview hid lines; user can load full text from GET …/tool-calls/{id}. */
+      /** Full saved tool output after user chose Load more (GET …/tool-calls/{id}). */
+      fullResultText?: string;
+      /** True when SSE or list preview omitted lines (_meta or resultPreviewTruncated). */
       resultWasTruncated?: boolean;
-      detailsLoaded?: boolean;
       startedAtMs?: number;
       finishedAtMs?: number;
       durationMs?: number;

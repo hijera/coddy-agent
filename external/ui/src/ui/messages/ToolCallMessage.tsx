@@ -1,5 +1,4 @@
-import { useMemo } from 'react';
-import { Markdown } from '../markdown/Markdown';
+import { type ReactElement, useCallback, useEffect, useMemo, useState } from 'react';
 
 function safePrettyJSON(text: string): string {
   try {
@@ -27,21 +26,88 @@ export function ToolCallMessage(props: {
   status: string;
   argsText?: string | undefined;
   resultText?: string | undefined;
+  fullResultText?: string | undefined;
   resultWasTruncated?: boolean | undefined;
-  detailsLoaded?: boolean | undefined;
   durationMs?: number;
-  onLoadDetails?: (toolCallId: string) => void;
+  onFetchToolCallFull?: (toolCallId: string) => Promise<void>;
 }) {
   const args = useMemo(() => (props.argsText ? safePrettyJSON(props.argsText) : ''), [props.argsText]);
-  const result = useMemo(() => (props.resultText ? props.resultText : ''), [props.resultText]);
+  const preview = useMemo(() => (props.resultText ? props.resultText : ''), [props.resultText]);
+  const full = props.fullResultText || '';
   const name = (props.title || props.kind || 'tool').trim();
   const status = (props.status || '').toLowerCase();
   const showSpinner = status === 'pending' || status === 'in_progress';
-  const needsFull =
-    !!props.onLoadDetails &&
-    !props.detailsLoaded &&
-    props.resultWasTruncated === true &&
-    (status === 'completed' || status === 'failed' || status === 'cancelled');
+
+  const [showExpanded, setShowExpanded] = useState(false);
+  const [loadingFull, setLoadingFull] = useState(false);
+
+  useEffect(() => {
+    setShowExpanded(false);
+    setLoadingFull(false);
+  }, [props.toolCallId]);
+
+  const canExpand =
+    props.resultWasTruncated === true && (status === 'completed' || status === 'failed' || status === 'cancelled');
+  const fetchFull = props.onFetchToolCallFull;
+
+  const onLoadMore = useCallback(async () => {
+    if (!fetchFull) return;
+    if (full) {
+      setShowExpanded(true);
+      return;
+    }
+    setLoadingFull(true);
+    try {
+      await fetchFull(props.toolCallId);
+      setShowExpanded(true);
+    } finally {
+      setLoadingFull(false);
+    }
+  }, [fetchFull, full, props.toolCallId]);
+
+  const onHide = useCallback(() => setShowExpanded(false), []);
+
+  const resultBody = showExpanded && full ? full : preview;
+  const useTallViewport =
+    props.resultWasTruncated === true || (showExpanded && full.trim() !== '');
+
+  const showToggleRow = canExpand && !!fetchFull && !!(preview || full);
+  let toggleLink: ReactElement | null = null;
+  if (showToggleRow) {
+    if (showExpanded && full) {
+      toggleLink = (
+        <button
+          type="button"
+          className="tool-result-text-link"
+          data-testid="tool-result-hide-link"
+          onClick={(e) => {
+            e.preventDefault();
+            onHide();
+          }}
+        >
+          Hide
+        </button>
+      );
+    } else {
+      toggleLink = (
+        <button
+          type="button"
+          className="tool-result-text-link"
+          data-testid="tool-result-more-link"
+          disabled={loadingFull}
+          onClick={(e) => {
+            e.preventDefault();
+            void onLoadMore();
+          }}
+        >
+          {loadingFull ? 'Loading...' : 'Load more results'}
+        </button>
+      );
+    }
+  }
+
+  const viewportMode = showExpanded && full ? 'scroll' : 'clip';
+
   const dur =
     typeof props.durationMs === 'number' && Number.isFinite(props.durationMs) && props.durationMs >= 0
       ? formatDuration(props.durationMs)
@@ -49,7 +115,7 @@ export function ToolCallMessage(props: {
 
   return (
     <div className="msg msg-tools msg-compact" data-kind={props.kind || ''} data-status={props.status}>
-      <details className="tool-details">
+      <details className="tool-details" data-testid={`tool-details-${props.toolCallId}`}>
         <summary className="tool-summary" aria-label="Tool summary" title="Click to expand">
           <span className="tool-left">
             <span className={`tool-dot tool-dot-${status || 'unknown'}`} aria-hidden="true" />
@@ -67,22 +133,20 @@ export function ToolCallMessage(props: {
             {args}
           </pre>
         ) : null}
-        {result ? (
-          <div className="tool-block tool-result" aria-label="Tool result">
-            <Markdown text={result} />
+        {resultBody ? (
+          <div
+            className={[
+              'tool-block tool-result tool-result-raw',
+              useTallViewport && `tool-result-viewport tool-result-viewport--tall tool-result-viewport--${viewportMode}`,
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            aria-label="Tool result"
+          >
+            <pre className="tool-result-pre">{resultBody}</pre>
           </div>
         ) : null}
-        {needsFull ? (
-          <div className="tool-load-full-wrap">
-            <button
-              type="button"
-              className="tool-load-full"
-              onClick={() => props.onLoadDetails?.(props.toolCallId)}
-            >
-              Load full output
-            </button>
-          </div>
-        ) : null}
+        {toggleLink ? <div className="tool-result-toggle-row">{toggleLink}</div> : null}
       </details>
     </div>
   );

@@ -132,7 +132,7 @@ The chat transcript renders a flat list of UI message blocks. Each block has a `
 - `tool_call`
   - A single tool execution card.
   - Summary row shows tool name, status dot, and duration label.
-  - Details show arguments and streamed result preview when expanded. **Load full output** loads the complete result from Coddy REST when the stream preview was truncated.
+  - Details show arguments and streamed result when expanded. The **result** body is plain text only (rendered like **`<pre>`**, **no** Markdown pipeline), monospace, muted grey (**`.tool-result-raw`**). If **`resultPreviewTruncated`** is false / **`resultWasTruncated`** unset, no **Load more** link and no fixed-height viewport (block height follows content). If truncated (19 content lines plus **`...`**), apply the capped viewport (~20 lines), **overflow-y** hidden until **Load more**. **Load more results** (**`data-testid="tool-result-more-link"`**) performs **GET `/coddy/sessions/{id}/tool-calls/{toolCallId}`**, then **overflow-y auto** and **Hide** (**`data-testid="tool-result-hide-link"`** ); **Hide** restores the clipped preview without a second GET while **fullResultText** stays in memory.
 - `assistant_message`
   - Final assistant output text for the turn, after tool calls.
 
@@ -145,6 +145,7 @@ The chat transcript renders a flat list of UI message blocks. Each block has a `
 
 ## Markdown rendering
 
+- Tool outputs are excluded; they stay raw monospace text (**`ToolCallMessage`**).
 - User and assistant messages may contain Markdown.
 - UI renders Markdown with fenced code blocks and syntax highlighting.
 - Each code block has a copy button that copies only that block content.
@@ -233,7 +234,14 @@ These scenarios are intended to be automated via Playwright against the Vite dev
   - Given a session has tool calls executed
   - When the user reloads the page
   - Then tool call cards are visible in the transcript
-  - And expanding a tool card shows args and preview result; truncated runs offer **Load full output** for the saved full result
+  - And expanding a tool card shows args and preview result; truncated runs show **Load more results** then **Hide** as above
+
+- Tool result truncation (Playwright MCP)
+  - Given a persisted session whose tool output on disk exceeds the preview line cap
+  - When the user opens the tool card and clicks **Load more results**
+  - Then the link becomes **Hide**, full lines are available inside the same max-height scrollable panel, and **`.tool-result-viewport--scroll`** has **`scrollHeight`** greater than **`clientHeight`**
+  - When the user clicks **Hide**
+  - Then the preview shows the capped text ending in **`...`**, **`overflow-y`** is hidden on **`.tool-result-viewport--clip`**, and **Load more results** appears again
 
 - Token usage survives restart
   - Given a session has non zero token usage

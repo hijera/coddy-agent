@@ -1006,23 +1006,62 @@ body {
   white-space: nowrap;
 }
 
-.tool-load-full-wrap {
+/* Tool output is always raw text (no Markdown); subtle grey monospace. */
+.tool-block.tool-result-raw {
+  color: rgba(186, 192, 204, 0.88);
+  background: rgba(8, 8, 10, 0.38);
+}
+
+.tool-result-viewport {
+  overflow-x: auto;
+}
+
+.tool-result-viewport--tall {
+  /* Matches .tool-block: 12px font, line-height 1.45 (+ vertical padding two sides). Tiny slack so row 20 (often "...") is not clipped by sub-pixel rounding. */
+  max-height: calc(12px * 1.45 * 20 + 26px);
+}
+
+.tool-result-pre {
+  margin: 0;
+  font: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tool-result-viewport--clip {
+  overflow-y: hidden;
+}
+
+.tool-result-viewport--scroll {
+  overflow-y: auto;
+}
+
+.tool-result-toggle-row {
   margin: 6px 0 0;
 }
 
-.tool-load-full {
+.tool-result-text-link {
+  display: inline;
+  padding: 0;
+  margin: 0;
   font: inherit;
   font-size: 12px;
-  padding: 6px 10px;
-  border-radius: 8px;
+  color: rgba(140, 175, 255, 0.95);
+  text-decoration: underline;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.88);
-  background: rgba(80, 120, 255, 0.25);
-  border: 1px solid rgba(120, 160, 255, 0.35);
+  text-align: left;
+  vertical-align: baseline;
+  border: none;
+  background: none;
 }
 
-.tool-load-full:hover {
-  background: rgba(80, 120, 255, 0.38);
+.tool-result-text-link:hover:not(:disabled) {
+  color: rgba(180, 205, 255, 1);
+}
+
+.tool-result-text-link:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 .tool-dur {

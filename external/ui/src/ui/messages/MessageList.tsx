@@ -15,7 +15,7 @@ function mainThinkingOverlapsMemory(items: TranscriptItem[], memIndex: number): 
   return false;
 }
 
-export function MessageList(props: { items: TranscriptItem[]; onLoadToolCallDetails?: (toolCallId: string) => void }) {
+export function MessageList(props: { items: TranscriptItem[]; onFetchToolCallFull?: (toolCallId: string) => Promise<void> }) {
   return (
     <>
       {props.items.map((it, idx) => {
@@ -69,10 +69,10 @@ export function MessageList(props: { items: TranscriptItem[]; onLoadToolCallDeta
             {...(it.kind !== undefined ? { kind: it.kind } : {})}
             {...(it.argsText !== undefined ? { argsText: it.argsText } : {})}
             {...(it.resultText !== undefined ? { resultText: it.resultText } : {})}
+            {...(it.fullResultText !== undefined ? { fullResultText: it.fullResultText } : {})}
             {...(it.resultWasTruncated === true ? { resultWasTruncated: true } : {})}
-            {...(it.detailsLoaded !== undefined ? { detailsLoaded: it.detailsLoaded } : {})}
             {...(typeof it.durationMs === 'number' ? { durationMs: it.durationMs } : {})}
-            {...(props.onLoadToolCallDetails ? { onLoadDetails: props.onLoadToolCallDetails } : {})}
+            {...(props.onFetchToolCallFull ? { onFetchToolCallFull: props.onFetchToolCallFull } : {})}
           />
         );
       })}

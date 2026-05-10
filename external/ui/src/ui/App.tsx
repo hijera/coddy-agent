@@ -657,7 +657,6 @@ export function App() {
             type: 'tool_call',
             toolCallId: id,
             status: 'pending',
-            detailsLoaded: false,
           };
           if (name) it.title = name;
           if (args) it.argsText = args;
@@ -677,7 +676,6 @@ export function App() {
             toolCallId: id,
             status: 'completed',
             resultText: m.content || '',
-            detailsLoaded: false,
           };
           toolIdx.set(id, next.length);
           next.push(it);
@@ -705,7 +703,6 @@ export function App() {
         const merged: Extract<TranscriptItem, { type: 'tool_call' }> = {
           ...cur,
           status,
-          detailsLoaded: false,
         };
         if (title) merged.title = title;
         if (kind) merged.kind = kind;
@@ -808,7 +805,7 @@ export function App() {
         if (update.argsText !== undefined) it.argsText = update.argsText;
         if (update.resultText !== undefined) it.resultText = update.resultText;
         if (update.resultWasTruncated !== undefined) it.resultWasTruncated = update.resultWasTruncated;
-        if (update.detailsLoaded !== undefined) it.detailsLoaded = update.detailsLoaded;
+        if (update.fullResultText !== undefined) it.fullResultText = update.fullResultText;
         if (update.startedAtMs !== undefined) it.startedAtMs = update.startedAtMs;
         if (update.finishedAtMs !== undefined) it.finishedAtMs = update.finishedAtMs;
         if (update.durationMs !== undefined) it.durationMs = update.durationMs;
@@ -836,7 +833,7 @@ export function App() {
       if (update.argsText !== undefined) merged.argsText = update.argsText;
       if (update.resultText !== undefined) merged.resultText = update.resultText;
       if (update.resultWasTruncated !== undefined) merged.resultWasTruncated = update.resultWasTruncated;
-      if (update.detailsLoaded !== undefined) merged.detailsLoaded = update.detailsLoaded;
+      if (update.fullResultText !== undefined) merged.fullResultText = update.fullResultText;
       next[idx] = merged;
       return next;
     });
@@ -968,7 +965,7 @@ export function App() {
             if (upd.argsText !== undefined) it.argsText = upd.argsText;
             if (upd.resultText !== undefined) it.resultText = upd.resultText;
             if (upd.resultWasTruncated !== undefined) it.resultWasTruncated = upd.resultWasTruncated;
-            if (upd.detailsLoaded !== undefined) it.detailsLoaded = upd.detailsLoaded;
+            if (upd.fullResultText !== undefined) it.fullResultText = upd.fullResultText;
             if (upd.startedAtMs !== undefined) it.startedAtMs = upd.startedAtMs;
             if (upd.finishedAtMs !== undefined) it.finishedAtMs = upd.finishedAtMs;
             if (upd.durationMs !== undefined) it.durationMs = upd.durationMs;
@@ -1004,7 +1001,7 @@ export function App() {
           if (upd.argsText !== undefined) merged.argsText = upd.argsText;
           if (upd.resultText !== undefined) merged.resultText = upd.resultText;
           if (upd.resultWasTruncated !== undefined) merged.resultWasTruncated = upd.resultWasTruncated;
-          if (upd.detailsLoaded !== undefined) merged.detailsLoaded = upd.detailsLoaded;
+          if (upd.fullResultText !== undefined) merged.fullResultText = upd.fullResultText;
           arr[idx] = merged;
           next = arr;
         }
@@ -1519,27 +1516,25 @@ export function App() {
           setDraft('');
           void streamResponses(text);
         }}
-        onLoadToolCallDetails={(toolCallId: string) => {
-          void (async () => {
-            if (!sessionId) return;
-            const det = await fetchJSON<{
-              args?: string;
-              result?: string;
-              meta?: { status?: string; kind?: string; name?: string };
-            }>(
-              `/coddy/sessions/${encodeURIComponent(sessionId)}/tool-calls/${encodeURIComponent(toolCallId)}`,
-              { headers },
-            );
-            if (!det.ok || !det.data) return;
-            const meta = det.data.meta || {};
-            const patch: any = { toolCallId, detailsLoaded: true, resultWasTruncated: false };
-            if (meta.name) patch.title = meta.name;
-            if (meta.kind) patch.kind = meta.kind;
-            if (meta.status) patch.status = meta.status;
-            if (det.data.args) patch.argsText = det.data.args;
-            if (det.data.result !== undefined) patch.resultText = det.data.result;
-            upsertToolCall(patch);
-          })();
+        onFetchToolCallFull={async (toolCallId: string) => {
+          if (!sessionId) return;
+          const det = await fetchJSON<{
+            args?: string;
+            result?: string;
+            meta?: { status?: string; kind?: string; name?: string };
+          }>(
+            `/coddy/sessions/${encodeURIComponent(sessionId)}/tool-calls/${encodeURIComponent(toolCallId)}`,
+            { headers },
+          );
+          if (!det.ok || !det.data) return;
+          const meta = det.data.meta || {};
+          const patch: Record<string, unknown> = { toolCallId };
+          if (meta.name) patch.title = meta.name;
+          if (meta.kind) patch.kind = meta.kind;
+          if (meta.status) patch.status = meta.status;
+          if (det.data.args) patch.argsText = det.data.args;
+          if (det.data.result !== undefined) patch.fullResultText = det.data.result;
+          upsertToolCall(patch as any);
         }}
         />
       </div>

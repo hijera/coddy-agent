@@ -163,6 +163,20 @@ func MarkToolCallFinished(sessionDir, toolCallID, name, kind, status string) err
 		Status:     strings.TrimSpace(status),
 		FinishedAt: now,
 	}
+	if prev, err := ReadToolCallMeta(sessionDir, toolCallID); err == nil && prev != nil {
+		if prev.Version != 0 {
+			meta.Version = prev.Version
+		}
+		if strings.TrimSpace(meta.Name) == "" {
+			meta.Name = prev.Name
+		}
+		if strings.TrimSpace(meta.Kind) == "" {
+			meta.Kind = prev.Kind
+		}
+		if strings.TrimSpace(prev.StartedAt) != "" {
+			meta.StartedAt = prev.StartedAt
+		}
+	}
 	return WriteToolCallMeta(sessionDir, toolCallID, meta)
 }
 

@@ -36,7 +36,7 @@ Token usage totals are persisted per session and restored after restart.
 
 Left-to-right zones:
 
-1. **Nav rail**: **History** opens the session list overlay, brand goes to the empty start screen; GitHub and **API docs** links (**API docs** opens **`/docs/`** in a **new browser tab**, same as GitHub **`target=_blank`** with **`rel=noopener`**). **Brand is text only** (**Coddy** plus **chat**), **no** circle or logo mark before the label, even if a reference mockup shows one. Optional **narrow vs wide rail** (**icons only vs icons plus labels**) on viewports **`min-width: 1920px`**, persisted in **`coddy_nav_rail`** cookie (**`narrow`** default).
+1. **Nav rail**: **History** opens the session list overlay, brand goes to the empty start screen; GitHub and **API docs** links (**API docs** opens **`/docs/`** in a **new browser tab**, same as GitHub **`target=_blank`** with **`rel=noopener`**). **Brand is text only** (**Coddy** plus **agent**), **no** circle or logo mark before the label, even if a reference mockup shows one. Optional **narrow vs wide rail** (**icons only vs icons plus labels**) on viewports **`min-width: 1920px`**, persisted in **`coddy_nav_rail`** cookie (**`narrow`** default).
 2. **Session list**: **always a drawer overlay** with a dimming backdrop. It must **not** consume a second grid column or shrink the chat canvas (no inline sessions column beside the rail at any breakpoint). **Panel chrome title copy is History** (not "Chats"). There is **no** global hamburger that opens a separate app menu; the **stacked-lines control** in the wide rail header **only** collapses the rail to the narrow (icons-only) layout, matching the references.
 3. **Chat canvas**: sticky header with editable title, scrollable transcripts, composer with **Send** (**Enter** submits, **`Shift+Enter`** newline).
 
@@ -69,7 +69,7 @@ The right insights rail is removed for the current milestone.
 
 - **Panel shape (desktop)**. The nav is a **tall rectangular column** along the **left viewport edge** with **rounding only on the right** (straight left edge flush with the browser). Avoid a centered **full-height capsule** that does not meet the edge.
 - **Wide rail width**. Pill width is **content-driven** (**`fit-content`**) with a sensible **max-width** cap, not a legacy fixed pixel width guess.
-- **Wide header brand**. **Coddy chat** is **one horizontal line** (**Coddy** + muted **chat**). Keep **breathing room to the right** of the label (**extra padding-right** on the brand control) so copy does not sit against the inner right edge of the panel.
+- **Wide header brand**. **Coddy agent** is **one horizontal line** (**Coddy** + muted **agent**). Keep **breathing room to the right** of the label (**extra padding-right** on the brand control) so copy does not sit against the inner right edge of the panel.
 - **Labeled rows (History, GitHub, API docs)**. Rows **share the same width** within the column (stretch to the **widest** row). Each row is a **single interactive surface** (icon + label), not a small icon hit target plus detached text.
 - **Icon column alignment**. The first grid track for row icons matches the **collapse** toggle footprint (**44px** wide control). **Horizontal padding** on row hits stays **balanced** (avoid oversized **padding-left** and cramped **padding-right** at the label end).
 - **Collapse vs global menu**. The **stacked-lines** control **only** narrows the rail. It is **not** a global app navigation drawer (see Nav rail item 2 above).

@@ -13,7 +13,7 @@ This page captures the original UI requirements and the intended end state. It i
 
 Desktop layout
 
-- **Brand** is **typography only** (**Coddy** and **chat**). **No** circular logo or icon before the brand text, regardless of older reference images that include a circle.
+- **Brand** is **typography only** (**Coddy** and **agent**). **No** circular logo or icon before the brand text, regardless of older reference images that include a circle.
 - Desktop nav is a **vertical panel** with rounding on the **right** edge (not a full-height center-pill). On **`min-width: 1920px`**, the wide rail header includes an icon with **horizontal lines** used **only** to **collapse** to narrow rail, not as a global navigation drawer.
 - Left rail opens **chat history** from **History** under the brand; brand click goes to the **start screen** (**new chat**).
 - Sessions list is **always** a **drawer overlay** with backdrop at **all** breakpoints and rail widths (**no** inline column beside the rail that would shrink the chat area). The panel heading and related chrome use the copy **History**.

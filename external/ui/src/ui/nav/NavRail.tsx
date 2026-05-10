@@ -99,9 +99,9 @@ export function NavRail(props: {
               >
                 <IconSidebarCollapse className="rail-toggle-svg" />
               </button>
-              <button type="button" className="rail-brand rail-brand-header" aria-label="Coddy chat home" data-testid="nav-home" onClick={props.onNewChat}>
+              <button type="button" className="rail-brand rail-brand-header" aria-label="Coddy agent home" data-testid="nav-home" onClick={props.onNewChat}>
                 <span className="rail-brand-text-header-single">
-                  Coddy<span className="rail-brand-header-chat"> chat</span>
+                  Coddy <span className="rail-brand-header-agent">agent</span>
                 </span>
               </button>
             </div>
@@ -121,10 +121,10 @@ export function NavRail(props: {
                 </span>
               </div>
               <div className="rail-tip-host rail-brand-tip-host">
-                <button type="button" className="rail-brand" aria-label="Coddy chat home" data-testid="nav-home" onClick={props.onNewChat}>
+                <button type="button" className="rail-brand" aria-label="Coddy agent home" data-testid="nav-home" onClick={props.onNewChat}>
                   <span className="rail-brand-text">
                     <span className="rail-brand-title">Coddy</span>
-                    <span className="rail-brand-sub">chat</span>
+                    <span className="rail-brand-sub">agent</span>
                   </span>
                 </button>
                 <span className="rail-tip" role="tooltip">
@@ -135,10 +135,10 @@ export function NavRail(props: {
           )
         ) : (
           <div className="rail-tip-host rail-brand-tip-host">
-            <button type="button" className="rail-brand" aria-label="Coddy chat home" data-testid="nav-home" onClick={props.onNewChat}>
+            <button type="button" className="rail-brand" aria-label="Coddy agent home" data-testid="nav-home" onClick={props.onNewChat}>
               <span className="rail-brand-text">
                 <span className="rail-brand-title">Coddy</span>
-                <span className="rail-brand-sub">chat</span>
+                <span className="rail-brand-sub">agent</span>
               </span>
             </button>
             <span className="rail-tip" role="tooltip">

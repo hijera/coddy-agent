@@ -378,7 +378,7 @@ func TestGETUIStatic(t *testing.T) {
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("status %d body %s", res.StatusCode, b)
 	}
-	if !strings.Contains(string(b), "<title>Coddy</title>") {
+	if !strings.Contains(string(b), "<title>Coddy Agent</title>") {
 		t.Fatal("missing UI title")
 	}
 }

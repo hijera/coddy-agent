@@ -39,6 +39,21 @@ func NextScheduledUTC(sched cron.Schedule, lastFiredSlot time.Time) time.Time {
 	return sched.Next(t).UTC()
 }
 
+// NextScheduledDisplayUTC returns the next cron instant strictly after max(lastFiredSlot, now) for UI lists.
+// When lastFiredSlot is zero (never recorded), anchors at now instead of CronEpoch so clients do not show 1970.
+// The daemon continues to use NextScheduledUTC for catch-up semantics.
+func NextScheduledDisplayUTC(sched cron.Schedule, lastFiredSlot time.Time, now time.Time) time.Time {
+	now = now.UTC()
+	anchor := lastFiredSlot.UTC()
+	if anchor.IsZero() {
+		return sched.Next(now).UTC()
+	}
+	if anchor.Before(now) {
+		anchor = now
+	}
+	return sched.Next(anchor).UTC()
+}
+
 // JobFrontmatter is YAML metadata for a scheduler job file (skills-style description field).
 type JobFrontmatter struct {
 	Description string `yaml:"description"`

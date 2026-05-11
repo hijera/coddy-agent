@@ -34,7 +34,7 @@ func (o *Service) jobFromPath(abs string, now time.Time, includeBody bool) (Sche
 		return SchedulerJob{}, err
 	}
 	last, _ := storage.ReadJobState(storage.StatePath(abs))
-	next := storage.NextScheduledUTC(sch, last)
+	next := storage.NextScheduledDisplayUTC(sch, last, now)
 	out := SchedulerJob{
 		JobID:       jobIDFromMDPath(abs),
 		Description: strings.TrimSpace(fm.Description),
@@ -52,9 +52,6 @@ func (o *Service) jobFromPath(abs string, now time.Time, includeBody bool) (Sche
 		out.LastScheduledSlotUTC = last.UTC().Format(time.RFC3339)
 	}
 	out.NextRunUTC = next.UTC().Format(time.RFC3339)
-	if next.After(now) {
-		// keep literal next time; clients may compare to now
-	}
 	return out, nil
 }
 

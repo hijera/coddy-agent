@@ -31,6 +31,43 @@ func TestNextScheduledUTCHourly(t *testing.T) {
 	}
 }
 
+func TestNextScheduledDisplayUTC_NoLastUsesNowNotEpoch(t *testing.T) {
+	s, err := ParseCronUTC("0 * * * *")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now, err := time.Parse(time.RFC3339, "2026-05-11T22:15:00Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := NextScheduledDisplayUTC(s, time.Time{}, now)
+	if want := "2026-05-11T23:00:00Z"; next.Format(time.RFC3339) != want {
+		t.Fatalf("got %s want %s", next.Format(time.RFC3339), want)
+	}
+	if !next.After(now) {
+		t.Fatalf("display next should be after now, got %v now %v", next, now)
+	}
+}
+
+func TestNextScheduledDisplayUTC_StaleLastAdvancesToNow(t *testing.T) {
+	s, err := ParseCronUTC("0 * * * *")
+	if err != nil {
+		t.Fatal(err)
+	}
+	last, err := time.Parse(time.RFC3339, "2026-05-11T08:00:00Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now, err := time.Parse(time.RFC3339, "2026-05-11T22:15:00Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := NextScheduledDisplayUTC(s, last, now)
+	if want := "2026-05-11T23:00:00Z"; next.Format(time.RFC3339) != want {
+		t.Fatalf("got %s want %s", next.Format(time.RFC3339), want)
+	}
+}
+
 func TestStatePathLockPath(t *testing.T) {
 	p := filepath.FromSlash("/x/y/job.md")
 	if g := StatePath(p); g != filepath.FromSlash("/x/y/job.state") {

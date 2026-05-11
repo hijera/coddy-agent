@@ -19,7 +19,9 @@ export function MarkdownLineEditor(props: {
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   const gutterText = useMemo(() => {
-    const n = props.value === "" ? 1 : props.value.split("\n").length;
+    const contentLines =
+      props.value === "" ? 1 : props.value.split("\n").length;
+    const n = Math.max(MARKDOWN_LINE_EDITOR_MIN_ROWS, contentLines);
     return Array.from({ length: n }, (_, i) => String(i + 1)).join("\n");
   }, [props.value]);
 

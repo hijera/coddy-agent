@@ -2838,13 +2838,17 @@ textarea#composer {
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: break-word;
-  overflow: hidden;
+  /* Avoid vertical clipping when the editor form is a flex column with a tall body field. */
+  overflow-x: hidden;
+  overflow-y: visible;
+  flex-shrink: 0;
+  align-self: flex-start;
   min-width: 0;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
   /* Clearance before cwd / next field when the hint wraps to several lines (narrow screens). */
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 
 .scheduler-job-editor-dock .scheduler-cron-hint {
@@ -3006,9 +3010,10 @@ textarea#composer {
     min-height: calc(12px * 1.45 * 10 + 16px);
   }
 
+  /* Natural height only - do not stretch to the scroll viewport or flex will shrink rows (cron hint). */
   .scheduler-dock-cluster.scheduler-dock-cluster-editor-active
     .scheduler-editor-form {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -3050,7 +3055,7 @@ textarea#composer {
   }
 
   .scheduler-job-editor-dock .scheduler-cron-hint {
-    margin-bottom: 14px;
+    margin-bottom: 0;
   }
 }
 

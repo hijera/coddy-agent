@@ -49,6 +49,15 @@ type ToolCallListRow = {
   resultPreviewTruncated?: boolean;
 };
 
+function readMessageCreatedAtUTC(m: Record<string, unknown>): string | undefined {
+  const raw = m.created_at ?? m.createdAt;
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+  const s = raw.trim();
+  return s === "" ? undefined : s;
+}
+
 function toolSseShowsTruncatedPreview(u: ToolCallStatusUpdate): boolean {
   const p = u._meta?.coddy?.toolResultPreview;
   return !!(p && p.truncated === true);
@@ -773,10 +782,12 @@ export function App() {
       const role = (m.role || "").trim();
       if (role === "user") {
         userTurnIdx++;
+        const cat = readMessageCreatedAtUTC(m as Record<string, unknown>);
         next.push({
           id: newId("u"),
           type: "user_message",
           content: m.content || "",
+          ...(cat ? { createdAtUtc: cat } : {}),
         });
         const mt = memByTurn.get(userTurnIdx);
         if (mt) {
@@ -821,7 +832,13 @@ export function App() {
         }
         const content = m.content || "";
         if (content) {
-          next.push({ id: newId("a"), type: "assistant_message", content });
+          const acat = readMessageCreatedAtUTC(m as Record<string, unknown>);
+          next.push({
+            id: newId("a"),
+            type: "assistant_message",
+            content,
+            ...(acat ? { createdAtUtc: acat } : {}),
+          });
         }
         const tcs = Array.isArray(m.tool_calls) ? m.tool_calls : [];
         for (const tc of tcs) {
@@ -1115,6 +1132,7 @@ export function App() {
         id: newId("u"),
         type: "user_message",
         content: text,
+        createdAtUtc: new Date().toISOString(),
       };
       const assistantId = newId("a");
       assistantStreamId = assistantId;
@@ -1374,17 +1392,25 @@ export function App() {
           );
           if (!res.ok || !res.data?.messages) return false;
           let last = "";
+          let lastCreated: string | undefined;
           for (const m of res.data.messages) {
             if ((m.role || "").trim() !== "assistant") continue;
             const c = (m.content || "").trim();
-            if (c) last = c;
+            if (c) {
+              last = c;
+              lastCreated = readMessageCreatedAtUTC(m as Record<string, unknown>);
+            }
           }
           if (!last) return false;
           ensureAssistant();
           setItems((prev) =>
             prev.map((it) =>
               it.type === "assistant_message" && it.id === assistantId
-                ? { ...it, content: last }
+                ? {
+                    ...it,
+                    content: last,
+                    ...(lastCreated ? { createdAtUtc: lastCreated } : {}),
+                  }
                 : it,
             ),
           );
@@ -1836,7 +1862,10 @@ export function App() {
       flushToolQueue();
 
       finishThinking();
-      ensureAssistant({ streaming: false });
+      ensureAssistant({
+        streaming: false,
+        createdAtUtc: new Date().toISOString(),
+      });
 
       void loadSessionsList(true);
       let ok = await syncAssistantFromServer();

@@ -124,6 +124,8 @@ Tool call history is persisted per session under `tool_calls/` so it can be rest
 
 ### Transcript message types (technical)
 
+Assistant messages keep the footer row **inside** the same padded box as the prose so the copy control shares the transcript inset. **User** copy and time sit **below** the grey bubble (outside the bubble contour), still **bottom-right** under that bubble. **Copy message** is a **bare icon** (no filled tile on hover); hover uses **link-violet** tint like markdown anchors; the browser **`title`** tooltip shows **Copy message** after a short hover like other native hints. Raw persisted text is copied on click. Timestamps use **`created_at`** (RFC3339 UTC): visible label is **local hour and minutes** only; hovering shows full calendar date, seconds, and timezone offset in the native **`title`** tooltip. Assistant prose uses the full transcript column width.
+
 The transcript UI is a flat list of message blocks (no nested threads). The runtime list lives in `external/ui/src/ui/chat/types.ts`.
 
 Current block types:

@@ -39,8 +39,8 @@ memory:
   model: "rpa/gpt-oss:120b"
 
 httpserver:
-  host: "127.0.0.1"
-  port: 19876
+  host: "0.0.0.0"
+  port: 19946
 
 scheduler:
   enabled: true
@@ -51,8 +51,8 @@ scheduler:
 
 logger:
   level: "info"
-  outputs: ["file"]
-  file: "__E2E_LOG_PATH__"
+  outputs: ["stderr"]
+  file: ""
   format: "text"
   rotation:
     max_size_mb: 0

@@ -689,6 +689,9 @@ func llmMsgsToCoddyOpenAI(msgs []llm.Message) []map[string]interface{} {
 		if m.Role == llm.RoleAssistant && strings.TrimSpace(m.Model) != "" {
 			item["model"] = strings.TrimSpace(m.Model)
 		}
+		if cat := strings.TrimSpace(m.CreatedAt); cat != "" {
+			item["created_at"] = cat
+		}
 		out = append(out, item)
 	}
 	return out

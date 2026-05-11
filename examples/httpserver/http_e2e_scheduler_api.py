@@ -141,7 +141,10 @@ def main() -> int:
 
     runs_url = f"{one}/runs"
     code, runs = http_json("GET", runs_url, None, timeout=30.0)
-    if code != 200 or not isinstance(runs.get("runs"), list):
+    raw_runs = runs.get("runs")
+    if raw_runs is None:
+        raw_runs = []
+    if code != 200 or not isinstance(raw_runs, list):
         print("GET runs", code, runs, file=sys.stderr)
         return 1
 

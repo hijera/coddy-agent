@@ -131,7 +131,18 @@ export function SchedulerJobsDrawer(props: {
                   </div>
                   {j.paused ? (
                     <span className="scheduler-job-paused">paused</span>
-                  ) : null}
+                  ) : (
+                    <span
+                      className="scheduler-job-row-next"
+                      title={
+                        j.next_run_utc && j.next_run_utc.trim()
+                          ? `${j.next_run_utc.trim()} (UTC)`
+                          : undefined
+                      }
+                    >
+                      Next {formatUtcHint(j.next_run_utc)}
+                    </span>
+                  )}
                 </div>
                 <div
                   className="scheduler-job-row-desc"
@@ -143,9 +154,6 @@ export function SchedulerJobsDrawer(props: {
                 >
                   {(j.description || "").trim() || "—"}
                 </div>
-              </div>
-              <div className="scheduler-job-row-sub">
-                <span>Next {formatUtcHint(j.next_run_utc)}</span>
               </div>
             </button>
             <div className="scheduler-job-row-actions">

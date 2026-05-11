@@ -127,8 +127,9 @@ export function SessionsSidebar(props: {
                 title="Delete"
                 data-testid={`session-delete-${s.id}`}
                 onMouseDown={(ev) => ev.stopPropagation()}
-                onClick={() => {
-                  props.onDelete(s.id);
+                onClick={(ev) => {
+                  ev.stopPropagation();
+                  void props.onDelete(s.id);
                 }}
               >
                 🗑

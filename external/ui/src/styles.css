@@ -2611,6 +2611,17 @@ textarea#composer {
   margin-left: 0;
 }
 
+.scheduler-job-row-next {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.48);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .scheduler-job-row-id {
   font-size: 13px;
   font-weight: 600;
@@ -2627,16 +2638,6 @@ textarea#composer {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.scheduler-job-row-sub {
-  margin-top: 4px;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  align-items: center;
 }
 
 .scheduler-job-paused {

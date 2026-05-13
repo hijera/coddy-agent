@@ -30,8 +30,7 @@ func MkdirTool() *tooling.Tool {
 				"required": []string{"path"},
 			},
 		},
-		AllowedInPlanMode: false,
-		Execute:           executeMkdir,
+		Execute: executeMkdir,
 	}
 }
 

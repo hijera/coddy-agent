@@ -387,7 +387,8 @@ def run_http_scheduler_agent_e2e_existing(base_v1: str, home: Path, work: Path) 
         print("BASE_URL must end with /v1", flush=True)
         return 12
 
-    model = os.environ.get("MODEL", "").strip() or model_from_demo()
+    yaml_model = os.environ.get("MODEL", "").strip() or model_from_demo()
+    profile = os.environ.get("CODDY_CHAT_PROFILE", "agent").strip()
     create_json = jd(job_create_args())
     compound_prompt = f"""Working directory MUST be: {work}
 STEP 1: run_command bash -lc 'echo {PHASE1_NEEDLE} > {PHASE1_MARKER}'
@@ -399,8 +400,9 @@ STEP 3: reply OK
         "POST",
         f"{base}/chat/completions",
         {
-            "model": model,
+            "model": profile,
             "stream": False,
+            "metadata": {"model": yaml_model},
             "messages": [{"role": "user", "content": compound_prompt}],
         },
     )

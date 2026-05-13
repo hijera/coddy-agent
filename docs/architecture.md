@@ -90,7 +90,7 @@ Maintains the state for each conversation session:
 
 The core reasoning engine (**`react.go`**):
 
-1. Loads mode-appropriate tool definitions (built-ins plus MCP) and filters by **`ToolsForMode`**.
+1. Loads tool definitions from **`internal/tooling.Registry.AllToolDefinitions`**, applies the session **`ToolSet`** from **`internal/agent/toolsets.go`** (empty set means no filter), and for **agent** mode only appends MCP tool definitions. **Plan** mode does not expose MCP tools.
 2. Builds the system prompt from **`internal/prompts.Render`**: embedded defaults or files under **`prompts.dir`** named by **`prompts.agent_prompt`** and **`prompts.plan_prompt`** (defaults **`agent.md`** and **`plan.md`**). Template data includes **`CWD`**, tools markdown, skills markdown (that order in stock templates), optional **`TodoList`** and **`Memory`**, plus **`UTCNow`** (RFC3339 UTC refreshed on every render).
 3. Prepends that system message to the session message list and appends the newest user turn.
 4. **Before every LLM invocation** inside one **`session/prompt`**, refreshes the **`system` message content** so **`TodoList`** and other template fields match state after prior tool calls in the same episode.
@@ -108,9 +108,11 @@ Supported backends (see **`docs/config.md`** for shapes):
 ### Tools Registry (`internal/tools`)
 
 The **tool types and registry mechanics** live in **`internal/tooling`** (`Tool`, `Env`,
-`Registry`, JSON `ParseArgs`, `ToolsForMode`). The **`internal/tools`** package is the
+`Registry`, JSON `ParseArgs`, **`AllToolDefinitions`**). The **`internal/tools`** package is the
 composition root (`NewRegistry` wires everything) and exposes the same APIs via type aliases so
 call sites such as **`internal/agent`** keep importing **`tools`** only.
+
+- **`internal/tools/web`** - **`search_web`** (DuckDuckGo text search) and **`extract_page_content`** (fetch public `http(s)` pages, readability + Markdown; SSRF guards)
 
 Built-in implementations are grouped in subfolders under **`internal/tools/`**:
 
@@ -123,14 +125,12 @@ Built-in implementations are grouped in subfolders under **`internal/tools/`**:
   **`coddy_todo_plan_archive`**, **`coddy_todo_item_add`**, **`coddy_todo_item_remove`**,
   **`coddy_todo_item_update`**, **`coddy_todo_item_move`**)
 
+**Tool exposure** - **`internal/agent/toolsets.go`** defines a **`ToolSet`** name allowlist per mode. An **empty** `ToolSet` means **no filtering** (all tools registered in the session registry, plus MCP definitions). **Plan** mode uses a fixed allowlist (**`read_file`**, **`list_dir`**, **`search_files`**, **`search_web`**, **`extract_page_content`**) and **does not** attach MCP tool definitions to the LLM request.
+
 Agents see:
 
-- **`read_file`**, **`list_dir`**, **`search_files`**, **`coddy_todo_plan_read`**, **`coddy_todo_plan_replace`**,
-  **`coddy_todo_plan_archive`**, **`coddy_todo_item_add`**, **`coddy_todo_item_remove`**, **`coddy_todo_item_update`**,
-  **`coddy_todo_item_move`**, and **`write_text_file`** when in **`plan`**
-  mode (**`write_text_file`** allows only `.txt` / `.md` / `.mdx` and is omitted from **`agent`**).
-- **`write_file`** and the rest (including **`mkdir`**, **`rm`**, **`mv`**, etc.) plus
-  **`run_command`** when in **`agent`** mode.
+- **`agent`** mode - every built-in registered by **`internal/tools.NewRegistryFor`** (filesystem, shell, todo, optional scheduler tools, **`search_web`**, **`extract_page_content`**, etc.) plus MCP tools from connected servers.
+- **`plan`** mode - only the **`ToolSet`** names above (read-only workspace search plus public web research). No writes, shell, todo tools, scheduler, memory, or MCP.
 
 `run_command`, optional write paths, and out-of-tree paths still go through **`session/request_permission`** as before.
 
@@ -151,7 +151,7 @@ Connects to external MCP servers specified in `session/new`. Supports:
 - stdio transport (always available)
 - HTTP transport (capability: `mcpCapabilities.http`)
 
-Tools from MCP servers are merged into the tools registry for the session.
+Tools from MCP servers are appended to the LLM tool list in **`agent`** mode only (see **`internal/agent/react.go`**).
 
 ### Skills loader (`internal/skills`)
 
@@ -172,10 +172,10 @@ YAML-based configuration. Resolution uses **`CODDY_HOME`** (default **`~/.coddy`
 - Suitable for: code generation, refactoring, debugging
 
 ### `plan` mode
-- Limited tools: read files, write/edit text/markdown files only
+- Narrow tool surface enforced by **`internal/agent.ToolSetForMode("plan")`**
+- **`read_file`**, **`list_dir`**, **`search_files`**, **`search_web`**, **`extract_page_content`** only (no shell, writes, todo tools, scheduler, memory, or MCP)
 - No code execution
-- Focused on planning, documentation, writing specs
-- Suitable for: design docs, specs, architecture planning
+- Suitable for: design docs, specs, architecture planning, external research without mutating the workspace
 
 Mode switching:
 - Client calls `session/set_config_option` with `configId` `mode` (preferred) or `session/set_mode` with `agent` or `plan`

@@ -26,8 +26,7 @@ func RmdirTool() *tooling.Tool {
 				"required": []string{"path"},
 			},
 		},
-		AllowedInPlanMode: false,
-		Execute:           executeRmdir,
+		Execute: executeRmdir,
 	}
 }
 

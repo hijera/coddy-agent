@@ -83,10 +83,13 @@ func (a *Agent) Run(ctx context.Context, prompt []acp.ContentBlock) (string, err
 	// Load skills applicable to this context.
 	activeSkills := skills.FilterForContext(a.state.GetSkills(), contextFiles)
 
-	toolDefs := a.registry.ToolsForMode(mode)
-	for _, mcpClient := range a.state.GetMCPClients() {
-		for _, t := range mcpClient.Tools() {
-			toolDefs = append(toolDefs, t.ToLLMToolDefinition(mcpClient.Name()))
+	toolSet := ToolSetForMode(mode)
+	toolDefs := FilterToolDefinitions(a.registry.AllToolDefinitions(), toolSet)
+	if toolSet.Unrestricted() {
+		for _, mcpClient := range a.state.GetMCPClients() {
+			for _, t := range mcpClient.Tools() {
+				toolDefs = append(toolDefs, t.ToLLMToolDefinition(mcpClient.Name()))
+			}
 		}
 	}
 
@@ -589,7 +592,7 @@ func extractContextFiles(blocks []acp.ContentBlock) []string {
 // toolKind maps a tool name to an ACP tool call kind.
 func toolKind(name string) string {
 	switch name {
-	case "read_file", "list_dir":
+	case "read_file", "list_dir", "search_files", "search_web", "extract_page_content":
 		return "read"
 	case "write_file", "write_text_file", "apply_diff", "mkdir", "rmdir", "touch", "rm", "mv":
 		return "write"

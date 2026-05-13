@@ -31,7 +31,6 @@ func memorySaveTool(store *memstorage.Store) *tooling.Tool {
 				"required": []interface{}{"title", "body", "scope"},
 			},
 		},
-		AllowedInPlanMode: false,
 		Execute: func(ctx context.Context, argsJSON string, _ *tooling.Env) (string, error) {
 			_ = ctx
 			var args struct {

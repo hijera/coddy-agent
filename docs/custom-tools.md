@@ -19,7 +19,13 @@ User prompt
     ▼
 ReAct loop (internal/agent/react.go)
     │
-    ├── builds tools.Registry  ←  NewRegistry() + MCP tools
+    ├── tools.NewRegistryFor(cfg) registers builtins (internal/tools/export.go)
+    │
+    ├── Registry.AllToolDefinitions()
+    │
+    ├── FilterToolDefinitions(..., ToolSetForMode(mode))  ← internal/agent/toolsets.go
+    │
+    ├── (agent mode only) append MCP tool definitions
     │
     ├── passes tool definitions to LLM via provider.Stream()
     │
@@ -37,20 +43,16 @@ decides to call a tool, the agent executes it and feeds the result back into the
 
 ## The `Tool` Struct
 
-Every tool is a value of type `tools.Tool` defined in `internal/tools/registry.go`:
+Every tool is a value of type `tools.Tool`, a type alias for `tooling.Tool` defined in
+[`internal/tooling/tool.go`](../internal/tooling/tool.go):
 
 ```go
 type Tool struct {
-    // Definition is the schema exposed to the LLM.
     Definition llm.ToolDefinition
 
     // RequiresPermission indicates the tool needs user approval before running.
     RequiresPermission bool
 
-    // AllowedInPlanMode indicates the tool is available in plan mode.
-    AllowedInPlanMode bool
-
-    // Execute runs the tool with the given JSON arguments.
     Execute func(ctx context.Context, argsJSON string, env *Env) (string, error)
 }
 ```
@@ -133,7 +135,6 @@ func fetchURLTool() *Tool {
                 "required": []string{"url"},
             },
         },
-        AllowedInPlanMode:  false,
         RequiresPermission: false,
         Execute:            executeFetchURL,
     }
@@ -189,20 +190,16 @@ Key rules for `Execute`:
 - Use `context.Context` for cancellation and timeouts
 - Use `parseArgs[T]` to unmarshal JSON arguments into a typed struct
 
-### 4. Register the tool in `NewRegistry()`
+### 4. Register the tool in `NewRegistryFor()`
 
-Open `internal/tools/registry.go` and add a call inside `NewRegistry()`:
+Open `internal/tools/export.go` and add `r.Register(...)` inside `NewRegistryFor()` (or register from a helper such as `internal/tools/fs/register.go` if you are extending the filesystem bundle).
 
 ```go
-func NewRegistry() *Registry {
-    r := &Registry{tools: make(map[string]*Tool)}
-    r.register(readFileTool())
-    r.register(writeFileTool())
-    r.register(listDirTool())
-    r.register(searchFilesTool())
-    r.register(runCommandTool())
-    r.register(applyDiffTool())
-    r.register(fetchURLTool())  // <-- add here
+func NewRegistryFor(cfg *config.Config) *Registry {
+    r := tooling.NewRegistry()
+    // ...
+    r.Register(fetchURLTool()) // <-- add here
+    registerSchedulerTools(r, cfg)
     return r
 }
 ```
@@ -213,17 +210,15 @@ That's it. After rebuilding (`go build ./...`), the LLM will see the new tool.
 
 ## Tool Fields Reference
 
-### `AllowedInPlanMode`
+### Plan vs agent exposure
 
-The agent has two operating modes: `agent` (full access) and `plan` (read-only planning).
+Mode-specific visibility is **not** configured on the `Tool` struct. Instead, `internal/agent/toolsets.go`
+defines a `ToolSet` allowlist:
 
-| Value   | Behavior |
-|---------|----------|
-| `true`  | Tool is available in both `agent` and `plan` modes |
-| `false` | Tool is only available in `agent` mode |
+- **`agent`** mode uses an **empty** `ToolSet`, which means **no filtering** - every tool in the registry is advertised, and MCP tools are appended.
+- **`plan`** mode uses a **fixed allowlist** (`read_file`, `list_dir`, `search_files`, `search_web`, `extract_page_content`). Everything else (writes, shell, todo tools, scheduler, memory, MCP) stays registered for execution consistency but is **hidden** from the LLM.
 
-Safe read-only tools (e.g. `read_file`, `list_dir`, `search_files`) should set this to `true`.
-Destructive or side-effectful tools should use `false`.
+When you add a new built-in that should be plan-safe, append its name to `planToolNames` in `internal/agent/toolsets.go` and extend tests in `internal/agent/toolsets_test.go`.
 
 ### `RequiresPermission`
 
@@ -233,8 +228,9 @@ before execution proceeds.
 
 Use `RequiresPermission: true` for:
 - Tools that execute external processes or shell commands
-- Tools that make network requests to external services
-- Tools that delete or irreversibly modify data
+- Tools that delete or irreversibly modify data outside clearly read-only flows
+
+Network tools may still use `RequiresPermission: false` when the implementation enforces its own guardrails (for example SSRF checks and response size limits on `extract_page_content`).
 
 Use `RequiresPermission: false` for:
 - Read-only operations
@@ -329,7 +325,6 @@ func gitLogTool() *Tool {
                 },
             },
         },
-        AllowedInPlanMode:  true,
         RequiresPermission: false,
         Execute:            executeGitLog,
     }
@@ -380,10 +375,10 @@ func executeGitLog(ctx context.Context, argsJSON string, env *Env) (string, erro
 }
 ```
 
-Then in `registry.go`:
+Then in `export.go`:
 
 ```go
-r.register(gitLogTool())
+r.Register(gitLogTool())
 ```
 
 ---
@@ -396,8 +391,8 @@ Before submitting a new tool, verify:
 - [ ] Description clearly explains what the tool does and when to use it
 - [ ] All required fields are listed in `InputSchema.required`
 - [ ] Optional fields have sensible defaults documented in their description
-- [ ] `AllowedInPlanMode` is set correctly (read-only → `true`, side-effectful → `false`)
-- [ ] `RequiresPermission` is set to `true` for destructive or external-network operations
+- [ ] If the tool must be visible in **plan** mode, add its name to `planToolNames` in `internal/agent/toolsets.go` and extend `internal/agent/toolsets_test.go`
+- [ ] `RequiresPermission` is set to `true` for destructive shell commands or sensitive writes
 - [ ] `Execute` returns `("", error)` for argument parsing failures
 - [ ] `Execute` returns `(errorMessage, nil)` for runtime failures so the LLM can see them
 - [ ] The tool constructor is registered in `NewRegistry()`
@@ -408,7 +403,7 @@ Before submitting a new tool, verify:
 ## Built-in Plan / Todo Tools
 
 Seven **`coddy_`** tools (`internal/tools/todo`) drive the checklist. Plan mutations emit
-`session/update` with **`plan`** payloads. They remain available in **both** **`agent`** and **`plan`** modes.
+`session/update` with **`plan`** payloads. They are registered for every session but **only advertised to the LLM in `agent` mode** (plan mode hides them via `ToolSet`).
 
 | Tool name | Purpose |
 |-----------|---------|
@@ -453,4 +448,4 @@ third-party integrations, or tools in other languages), use the
 [MCP server integration](./mcp-integration.md).
 
 MCP tools are registered at runtime with the prefix `serverName__toolName` and follow the same
-`AllowedInPlanMode`/permission model as built-in tools.
+`RequiresPermission`/plan allowlist model as built-in tools.

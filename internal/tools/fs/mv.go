@@ -32,8 +32,7 @@ func MoveTool() *tooling.Tool {
 				"required": []string{"src", "dst"},
 			},
 		},
-		AllowedInPlanMode: false,
-		Execute:           executeMove,
+		Execute: executeMove,
 	}
 }
 

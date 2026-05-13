@@ -3,6 +3,7 @@ package tooling
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/EvilFreelancer/coddy-agent/internal/llm"
 )
@@ -30,19 +31,18 @@ func (r *Registry) RegisterMCPTool(serverName string, t *Tool) {
 	r.tools[key] = &namespaced
 }
 
-// ToolsForMode returns tool definitions available in the given mode.
-func (r *Registry) ToolsForMode(mode string) []llm.ToolDefinition {
-	var defs []llm.ToolDefinition
-	for _, t := range r.tools {
-		if mode == "agent" && t.PlanOnly {
-			continue
-		}
-		if mode == "plan" && !t.AllowedInPlanMode {
-			continue
-		}
-		defs = append(defs, t.Definition)
+// AllToolDefinitions returns every registered tool definition in stable name order.
+func (r *Registry) AllToolDefinitions() []llm.ToolDefinition {
+	names := make([]string, 0, len(r.tools))
+	for name := range r.tools {
+		names = append(names, name)
 	}
-	return defs
+	sort.Strings(names)
+	out := make([]llm.ToolDefinition, 0, len(names))
+	for _, name := range names {
+		out = append(out, r.tools[name].Definition)
+	}
+	return out
 }
 
 // Execute runs the named tool with the given JSON arguments.

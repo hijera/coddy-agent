@@ -28,7 +28,6 @@ func AskUserApprovalTool() *tooling.Tool {
 				"required": []string{"message"},
 			},
 		},
-		AllowedInPlanMode:  false,
 		RequiresPermission: false,
 		Execute:            executeAskUserApproval,
 	}

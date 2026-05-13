@@ -35,8 +35,7 @@ func ListDirTool() *tooling.Tool {
 				},
 			},
 		},
-		AllowedInPlanMode: true,
-		Execute:           executeListDir,
+		Execute: executeListDir,
 	}
 }
 

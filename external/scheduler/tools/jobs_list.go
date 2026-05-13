@@ -30,7 +30,6 @@ func jobsListTool(cfg *config.Config) *tooling.Tool {
 				},
 			},
 		},
-		AllowedInPlanMode: true,
 		Execute: func(ctx context.Context, argsJSON string, env *tooling.Env) (string, error) {
 			var in struct {
 				IncludeBody bool `json:"include_body"`

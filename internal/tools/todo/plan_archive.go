@@ -23,7 +23,6 @@ func PlanArchiveTool() *tooling.Tool {
 				"properties": map[string]interface{}{},
 			},
 		},
-		AllowedInPlanMode: true,
 		Execute:           execPlanArchive,
 	}
 }

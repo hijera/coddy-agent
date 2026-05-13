@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Full HTTP gateway e2e. Expects repo ./build/coddy from: make build TAGS="http scheduler" (examples/build_coddy.sh).
+# Full HTTP gateway e2e. Expects repo ./build/coddy from examples/build_coddy.sh (TAGS include http, scheduler, memory).
 # Optional Docker smoke: examples/httpserver/docker.sh (from repo root).
 
 set -euo pipefail

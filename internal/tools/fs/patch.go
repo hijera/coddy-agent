@@ -31,8 +31,7 @@ func ApplyDiffTool() *tooling.Tool {
 				"required": []string{"path", "diff"},
 			},
 		},
-		AllowedInPlanMode: false,
-		Execute:           executeApplyDiff,
+		Execute: executeApplyDiff,
 	}
 }
 

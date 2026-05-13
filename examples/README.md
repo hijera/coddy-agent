@@ -20,7 +20,7 @@ Paired HTTP and ACP scripts share the same stem after the prefix:
 | Path | Role |
 |------|------|
 | **`config.demo.yaml`** | Shared YAML for demos (models, scheduler, skills dirs, logger placeholder **`__E2E_LOG_PATH__`** where scripts rewrite it). |
-| **`build_coddy.sh`** | **`make build TAGS="http scheduler"`** then **`./build/coddy -v`**. |
+| **`build_coddy.sh`** | **`make build TAGS="http scheduler memory"`** then **`./build/coddy -v`**. |
 | **`httpserver/`** | HTTP Python harnesses, **`test_httpserver.sh`**, **`docker.sh`**. |
 | **`acp/`** | ACP Python harnesses and **`test_acp.sh`**. |
 | **`shared/`** | **`scheduler_e2e_common.py`** for **`e2e_scheduler_agent`** (HTTP and ACP). |

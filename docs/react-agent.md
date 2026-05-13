@@ -129,23 +129,21 @@ Embedded **`agent.md`** describes agent behavior (quality, shells, todos). Todo-
 
 Representative builtins (excluding MCP-namespaced tools):
 
-- `read_file`, `write_file`, `list_dir`, `search_files`
+- `read_file`, `write_file`, `write_text_file`, `list_dir`, `search_files`
+- `search_web`, `extract_page_content`
 - `run_command`, `apply_diff`
 - Filesystem mutations: **`mkdir`**, **`rm`**, **`rmdir`**, **`touch`**, **`mv`** (subset may require permission paths)
 - Session checklist: **`coddy_todo_plan_read`**, **`coddy_todo_plan_replace`**, **`coddy_todo_plan_archive`**, **`coddy_todo_item_add`**, **`coddy_todo_item_remove`**, **`coddy_todo_item_update`**, **`coddy_todo_item_move`**
 - All MCP server tools (names **`serverName__toolName`**)
 
-Plan mode forbids **`write_file`** entirely; **`write_text_file`** is **`PlanOnly`** and hidden from **`agent`**.
-
 ### Plan Mode
 
-Embedded **`plan.md`** restricts execution (no shell, no edits to arbitrary code suffixes).
+Embedded **`plan.md`** restricts execution (no shell, no workspace writes, no todo tools, no MCP tools).
 
-Representative builtins:
+Representative builtins exposed to the LLM:
 
 - `read_file`, `list_dir`, `search_files`
-- **`write_text_file`** (only **`.txt`**, **`.md`**, **`.mdx`** destinations)
-- Full todo toolchain above (**`AllowedInPlanMode`** on each todo tool)
+- `search_web`, `extract_page_content`
 
 When ready to ship implementation work, prompts instruct switching the client to **`agent`** mode.
 

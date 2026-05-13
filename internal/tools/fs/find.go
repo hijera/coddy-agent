@@ -44,8 +44,7 @@ func SearchFilesTool() *tooling.Tool {
 				"required": []string{"pattern"},
 			},
 		},
-		AllowedInPlanMode: true,
-		Execute:           executeSearchFiles,
+		Execute: executeSearchFiles,
 	}
 }
 

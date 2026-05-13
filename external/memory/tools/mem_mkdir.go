@@ -25,7 +25,6 @@ func memoryMkdirTool(store *memstorage.Store) *tooling.Tool {
 				"required": []interface{}{"path"},
 			},
 		},
-		AllowedInPlanMode: false,
 		Execute: func(ctx context.Context, argsJSON string, _ *tooling.Env) (string, error) {
 			_ = ctx
 			var args struct {

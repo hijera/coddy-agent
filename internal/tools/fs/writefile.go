@@ -32,7 +32,6 @@ func WriteFileTool() *tooling.Tool {
 				"required": []string{"path", "content"},
 			},
 		},
-		AllowedInPlanMode:  false,
 		RequiresPermission: false,
 		Execute:            executeWriteFile,
 	}
@@ -43,9 +42,7 @@ func WriteTextFileTool() *tooling.Tool {
 	base := WriteFileTool()
 	base.Definition.Name = "write_text_file"
 	base.Definition.Description = "Write or create a text or markdown file. Only .txt, .md, .mdx files are allowed."
-	base.AllowedInPlanMode = true
 	base.RequiresPermission = false
-	base.PlanOnly = true
 
 	baseExec := base.Execute
 	base.Execute = func(ctx context.Context, argsJSON string, env *tooling.Env) (string, error) {

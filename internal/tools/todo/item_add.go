@@ -40,7 +40,6 @@ func ItemAddTool() *tooling.Tool {
 				"required": []string{"content"},
 			},
 		},
-		AllowedInPlanMode: true,
 		Execute:           execItemAdd,
 	}
 }

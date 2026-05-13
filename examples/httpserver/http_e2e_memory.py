@@ -99,7 +99,11 @@ def main() -> int:
     found = False
     while time.time() < deadline and not found:
         for root in (global_mem, project_mem):
-            for p in root.rglob("*.md"):
+            for p in root.rglob("*"):
+                if not p.is_file():
+                    continue
+                if p.suffix.lower() not in (".md", ".txt"):
+                    continue
                 try:
                     if fruit in p.read_text(encoding="utf-8", errors="replace"):
                         found = True

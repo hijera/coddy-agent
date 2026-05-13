@@ -36,7 +36,6 @@ func RunCommandTool() *tooling.Tool {
 				"required": []string{"command"},
 			},
 		},
-		AllowedInPlanMode:  false,
 		RequiresPermission: true,
 		Execute:            executeRunCommand,
 	}

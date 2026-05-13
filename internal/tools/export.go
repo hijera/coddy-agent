@@ -6,6 +6,7 @@ import (
 	toolfs "github.com/EvilFreelancer/coddy-agent/internal/tools/fs"
 	"github.com/EvilFreelancer/coddy-agent/internal/tools/shell"
 	"github.com/EvilFreelancer/coddy-agent/internal/tools/todo"
+	toolweb "github.com/EvilFreelancer/coddy-agent/internal/tools/web"
 )
 
 // Re-export tooling types used by agent, session wiring, and tests.
@@ -33,6 +34,8 @@ func NewRegistryFor(cfg *config.Config) *Registry {
 	r.Register(todo.ItemRemoveTool())
 	r.Register(todo.ItemUpdateTool())
 	r.Register(todo.ItemMoveTool())
+	r.Register(toolweb.SearchWebTool())
+	r.Register(toolweb.ExtractPageContentTool())
 	registerSchedulerTools(r, cfg)
 	return r
 }

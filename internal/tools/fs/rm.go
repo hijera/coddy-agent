@@ -30,8 +30,7 @@ func RemoveTool() *tooling.Tool {
 				"required": []string{"path"},
 			},
 		},
-		AllowedInPlanMode: false,
-		Execute:           executeRemove,
+		Execute: executeRemove,
 	}
 }
 

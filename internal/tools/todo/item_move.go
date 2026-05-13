@@ -34,7 +34,6 @@ func ItemMoveTool() *tooling.Tool {
 				"required": []string{"from_index", "to_index"},
 			},
 		},
-		AllowedInPlanMode: true,
 		Execute:           execItemMove,
 	}
 }

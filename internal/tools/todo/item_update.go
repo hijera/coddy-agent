@@ -37,7 +37,6 @@ func ItemUpdateTool() *tooling.Tool {
 				"required": []string{"index"},
 			},
 		},
-		AllowedInPlanMode: true,
 		Execute:           execItemUpdate,
 	}
 }

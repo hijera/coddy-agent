@@ -154,19 +154,6 @@ func TestCoddyTodoToolsRegistered(t *testing.T) {
 	}
 }
 
-func TestCoddyTodoToolsAllowedInPlanMode(t *testing.T) {
-	r := newRegistry()
-	for _, name := range todo.AllCoddyTodoToolNames {
-		tool, ok := r.Get(name)
-		if !ok {
-			t.Fatalf("%q not registered", name)
-		}
-		if !tool.AllowedInPlanMode {
-			t.Errorf("%q should be allowed in plan mode", name)
-		}
-	}
-}
-
 func TestPlanReadReturnsMarkdownChecklist(t *testing.T) {
 	sender := &mockSender{}
 	plan := []acp.PlanEntry{

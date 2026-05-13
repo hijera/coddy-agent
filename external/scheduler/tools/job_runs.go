@@ -28,7 +28,6 @@ func jobRunsTool(cfg *config.Config) *tooling.Tool {
 				"required": []interface{}{"job_id"},
 			},
 		},
-		AllowedInPlanMode: true,
 		Execute: func(ctx context.Context, argsJSON string, env *tooling.Env) (string, error) {
 			var in struct {
 				JobID string `json:"job_id"`

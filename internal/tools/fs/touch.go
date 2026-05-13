@@ -32,8 +32,7 @@ func TouchTool() *tooling.Tool {
 				"required": []string{"path"},
 			},
 		},
-		AllowedInPlanMode: false,
-		Execute:           executeTouch,
+		Execute: executeTouch,
 	}
 }
 

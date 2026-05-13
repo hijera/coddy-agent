@@ -28,7 +28,6 @@ func memorySearchTool(store *memstorage.Store, mem *config.MemoryConfig) *toolin
 				"required": []interface{}{"query"},
 			},
 		},
-		AllowedInPlanMode: true,
 		Execute: func(ctx context.Context, argsJSON string, _ *tooling.Env) (string, error) {
 			_ = ctx
 			var args struct {

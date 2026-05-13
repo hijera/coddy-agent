@@ -11,7 +11,8 @@ Calls a real configured LLM via ``POST /v1/responses`` (``model``: ``agent`` or 
 Environment:
 
 - ``BASE_URL`` - OpenAI-compatible base ending in ``/v1`` (default ``http://127.0.0.1:19876/v1``).
-- ``MODEL`` - Coddy profile (default ``agent``).
+- ``MODEL`` - YAML ``models[].model`` id (default ``rpa/gpt-oss:120b``), same as other HTTP e2e harnesses.
+- ``CODDY_CHAT_PROFILE`` - Coddy profile for ``POST /v1/responses`` (default ``agent``).
 
 Checks:
 
@@ -70,7 +71,8 @@ def coddy_http_origin(v1: str) -> str:
 def main() -> int:
     v1 = openai_v1_base()
     origin = coddy_http_origin(v1)
-    model = os.environ.get("MODEL", "agent").strip()
+    yaml_model = os.environ.get("MODEL", "rpa/gpt-oss:120b").strip()
+    profile = os.environ.get("CODDY_CHAT_PROFILE", "agent").strip()
 
     code, page, _ = http_json(
         "GET",
@@ -94,7 +96,12 @@ def main() -> int:
     code, resp, headers = http_json(
         "POST",
         f"{v1}/responses",
-        {"model": model, "input": prompt, "stream": False},
+        {
+            "model": profile,
+            "input": prompt,
+            "stream": False,
+            "metadata": {"model": yaml_model},
+        },
         {},
     )
     if code != 200:
@@ -112,7 +119,12 @@ def main() -> int:
     code, ctrl, _ = http_json(
         "POST",
         f"{v1}/responses",
-        {"model": model, "input": "Say only: hello-demo-control", "stream": False},
+        {
+            "model": profile,
+            "input": "Say only: hello-demo-control",
+            "stream": False,
+            "metadata": {"model": yaml_model},
+        },
         {"X-Coddy-Session-ID": sid} if sid else {},
     )
     if code != 200:

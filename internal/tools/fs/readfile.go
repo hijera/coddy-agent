@@ -34,8 +34,7 @@ func ReadFileTool() *tooling.Tool {
 				"required": []string{"path"},
 			},
 		},
-		AllowedInPlanMode: true,
-		Execute:           executeReadFile,
+		Execute: executeReadFile,
 	}
 }
 

@@ -59,8 +59,8 @@ func TestRenderPlanPrompt(t *testing.T) {
 	if !strings.Contains(result, "switch the session") {
 		t.Error("plan prompt should instruct switching to agent mode in the client")
 	}
-	if !strings.Contains(result, "todo plan tools") {
-		t.Error("plan prompt should mention todo plan tools for checklists")
+	if !strings.Contains(result, "search_web") {
+		t.Error("plan prompt should mention search_web for external research")
 	}
 	if !strings.Contains(result, "## Current UTC time") || !strings.Contains(result, fixtureUTC) {
 		t.Error("plan prompt should end with Current UTC time section")

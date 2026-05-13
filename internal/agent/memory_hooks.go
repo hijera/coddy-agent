@@ -1,3 +1,5 @@
+//go:build memory
+
 package agent
 
 import (

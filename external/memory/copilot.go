@@ -1,45 +1,24 @@
+//go:build memory
+
 package memory
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"log/slog"
 	"strings"
 	"time"
 
+	memstorage "github.com/EvilFreelancer/coddy-agent/external/memory/storage"
+	memtools "github.com/EvilFreelancer/coddy-agent/external/memory/tools"
 	"github.com/EvilFreelancer/coddy-agent/internal/config"
 	"github.com/EvilFreelancer/coddy-agent/internal/llm"
+	"github.com/EvilFreelancer/coddy-agent/internal/tooling"
 )
 
-// beforeTurnSystem is the single memory copilot pass that runs before the main agent each user turn.
-// The model must choose one primary mode: RECALL (read-only tools) or PERSIST (may write), not both in one turn.
-const beforeTurnSystem = `You are the memory copilot for a coding agent. You run exactly ONCE per user message, BEFORE the main assistant model runs. You never speak to the end user directly.
-
-You have all memory tools. Each user turn you must follow exactly ONE mode:
-
-MODE RECALL - load context from disk for the main assistant
-- Use ONLY coddy_memory_search, coddy_memory_list, coddy_memory_read. Do NOT call coddy_memory_mkdir, coddy_memory_save, or coddy_memory_delete.
-- Choose RECALL when the user wants help that benefits from prior saved facts, project context, or preferences, or when they did not clearly ask only to store or forget something.
-- Default to RECALL when unsure.
-- Search uses word overlap between your query and file paths plus bodies. Notes may be written in a different language than the user's message. If the user asks how you are called, your name, identity, or similar (any language), run coddy_memory_search with scope "both" using (1) their wording and (2) a second query with English keywords such as: assistant name identity preferences how to address you call you.
-- If searches still show nothing relevant, try coddy_memory_list on global: and project: then coddy_memory_read plausible paths (for example assistant or preferences folders).
-
-MODE PERSIST - update long-term storage based on this user message alone (you do not have the assistant reply yet)
-- You MAY use coddy_memory_search, coddy_memory_list, coddy_memory_read, coddy_memory_mkdir, coddy_memory_save, coddy_memory_delete.
-- Choose PERSIST when the user explicitly asks to remember, save, store for later, forget, delete a saved fact, or rename their preference; or when the clear primary intent is writing durable notes from what they said.
-- Before saving: read existing notes to avoid duplicates. Use coddy_memory_mkdir before first save under a new folder branch.
-
-Opt-out: if the user clearly forbids consulting saved notes for this message, skip RECALL tools and reply with one short line; no paths or tool jargon.
-
-Paths use scope:relative (global:... or project:...). Global root defaults to $CODDY_HOME/memory; project root is cwd/memory.
-
-RECALL finishing text (plain only, no tools): structure with "Already on disk" and optional "Not in notes" bullets. Write only facts the main assistant should apply - no memory paths, no scope prefixes (global:/project:), no file names, extensions, or citations like "see ...md". Do not name where a fact was stored. If nothing matched after search/read, reply exactly: (no memory hits)
-
-PERSIST finishing text (plain only, no tools): briefly what you verified on disk and what you saved, skipped, or deleted.
-
-Secrets: never store API keys, tokens, passwords, or one-off credentials in coddy_memory_save body.
-
-When finished with tools in your chosen mode, respond with plain text only (no tool calls).`
+//go:embed prompts/copilot.md
+var beforeTurnSystemPrompt string
 
 // BeforeTurnOutcome is the result of the single pre-main-agent memory copilot pass.
 type BeforeTurnOutcome struct {
@@ -119,8 +98,8 @@ func appendRecallReadPath(slice []string, p string) []string {
 	return append(slice, p)
 }
 
-func runCopilotStreamRound(ctx context.Context, prov llm.Provider, msgs []llm.Message, tools []llm.ToolDefinition, onStream func(kind StreamKind, delta string)) (*llm.Response, error) {
-	resp, err := prov.Stream(ctx, msgs, tools, func(ch llm.StreamChunk) {
+func runCopilotStreamRound(ctx context.Context, prov llm.Provider, msgs []llm.Message, defs []llm.ToolDefinition, onStream func(kind StreamKind, delta string)) (*llm.Response, error) {
+	resp, err := prov.Stream(ctx, msgs, defs, func(ch llm.StreamChunk) {
 		if onStream == nil {
 			return
 		}
@@ -143,7 +122,7 @@ func RunBeforeTurn(ctx context.Context, log *slog.Logger, cfg *config.Config, cw
 	if !cfg.Memory.Enabled {
 		return out, 0, nil
 	}
-	store, err := NewStore(&cfg.Memory, cfg.Paths, cwd)
+	store, err := memstorage.NewStore(&cfg.Memory, cfg.Paths, cwd)
 	if err != nil {
 		return out, 0, err
 	}
@@ -151,9 +130,11 @@ func RunBeforeTurn(ctx context.Context, log *slog.Logger, cfg *config.Config, cw
 	if err != nil {
 		return out, 0, err
 	}
-	tools := PersistToolDefinitions()
+	memTools := memtools.PersistTools(store, &cfg.Memory)
+	toolDefs := memtools.ToolDefinitions(memTools)
+	toolEnv := &tooling.Env{CWD: cwd}
 	msgs := []llm.Message{
-		{Role: llm.RoleSystem, Content: beforeTurnSystem},
+		{Role: llm.RoleSystem, Content: strings.TrimSpace(beforeTurnSystemPrompt)},
 		{Role: llm.RoleUser, Content: "User message for this turn:\n" + userQuery},
 	}
 	maxTurns := cfg.Memory.PersistMaxTurns
@@ -176,9 +157,9 @@ func RunBeforeTurn(ctx context.Context, log *slog.Logger, cfg *config.Config, cw
 		var resp *llm.Response
 		var err error
 		if opts != nil && opts.OnStream != nil {
-			resp, err = runCopilotStreamRound(ctx, prov, msgs, tools, opts.OnStream)
+			resp, err = runCopilotStreamRound(ctx, prov, msgs, toolDefs, opts.OnStream)
 		} else {
-			resp, err = prov.Complete(ctx, msgs, tools)
+			resp, err = prov.Complete(ctx, msgs, toolDefs)
 		}
 		if err != nil {
 			return out, timeNowMs() - started, err
@@ -201,16 +182,17 @@ func RunBeforeTurn(ctx context.Context, log *slog.Logger, cfg *config.Config, cw
 			if mutationSeen || out.Persist.Saved {
 				out.Mode = "persist"
 			}
+			out.ReadPaths = readPaths
 			return out, timeNowMs() - started, nil
 		}
 		msgs = append(msgs, llm.Message{Role: llm.RoleAssistant, Content: resp.Content, ToolCalls: resp.ToolCalls})
 		for _, tc := range resp.ToolCalls {
 			switch tc.Name {
-			case "coddy_memory_save", "coddy_memory_mkdir", "coddy_memory_delete":
+			case memtools.NameSave, memtools.NameMkdir, memtools.NameDelete:
 				mutationSeen = true
 			}
-			res, ex := execTool(store, &cfg.Memory, tc.Name, tc.InputJSON)
-			if tc.Name == "coddy_memory_read" && ex == nil {
+			res, ex := memtools.Exec(ctx, memTools, tc.Name, tc.InputJSON, toolEnv)
+			if tc.Name == memtools.NameRead && ex == nil {
 				var ra struct {
 					Path string `json:"path"`
 				}
@@ -220,7 +202,7 @@ func RunBeforeTurn(ctx context.Context, log *slog.Logger, cfg *config.Config, cw
 			}
 			if ex != nil {
 				res = "error: " + ex.Error()
-			} else if tc.Name == "coddy_memory_save" {
+			} else if tc.Name == memtools.NameSave {
 				var args struct {
 					Title        string `json:"title"`
 					Body         string `json:"body"`
@@ -260,5 +242,6 @@ func RunBeforeTurn(ctx context.Context, log *slog.Logger, cfg *config.Config, cw
 		out.ContextText = out.Persist.Reason
 		out.Mode = "persist"
 	}
+	out.ReadPaths = readPaths
 	return out, dur, nil
 }

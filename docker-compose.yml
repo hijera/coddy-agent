@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
       args:
         VERSION: ${CODDY_VERSION:-dev}
-        BUILD_TAGS: ${CODDY_BUILD_TAGS:-http,scheduler,ui}
+        BUILD_TAGS: ${CODDY_BUILD_TAGS:-http,scheduler,ui,memory}
     image: coddy-agent:${CODDY_VERSION:-dev}
     ports:
       - "12345:12345"

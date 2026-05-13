@@ -45,11 +45,17 @@ No authentication is enforced. Run behind appropriate network controls.
 | DELETE | **`/coddy/sessions/{id}`** | Removes the entire persisted session directory (including `tool_calls/` and `stats.json`) plus in-memory MCP clients. |
 | GET/PUT | **`/coddy/sessions/{id}/plan`** | Read or overwrite todo **`entries`** (ACP shape). |
 | POST | **`/coddy/sessions/{id}/plan/archive`** | Archives active todos like **`coddy_todo_plan_archive`**. |
+### Session memory REST (**`-tags=http,memory`**)
+
+These **`/coddy/sessions/{id}/memory/*`** routes register only when **`coddy`** is built with **`memory`** (**`external/httpserver/memory_http.go`**). A plain **`http`** build without **`memory`** returns **`404`** (**`memory_http_stub.go`**).
+
+| Method | Path | Notes |
+|--------|------|-------|
 | GET | **`/coddy/sessions/{id}/memory/tree`** | Without **`root`**, lists **`global`** and **`workspace`**. Otherwise lists allowed **`.md` / `.txt`** children (traversal guarded). |
 | GET | **`/coddy/sessions/{id}/memory/file`** | Query **`root`** + **`path`**. UTF-8 content. |
 | PUT | **`/coddy/sessions/{id}/memory/file`** | JSON **`{"root","path","content"}`**. |
 | POST | **`/coddy/sessions/{id}/memory/dir`** | JSON **`{"root","path"}`** for new subdirectory. |
-| DELETE | **`/coddy/sessions/{id}/memory/file`** | Query **`root`** + **`path`**. |
+| DELETE | **`/coddy/sessions/{id}/memory/file`** | Query **`root`** + **`path`**. Removes a **`.md` / `.txt`** file or deletes a directory tree recursively. **`400`** when **`path`** targets the memory root itself. |
 
 ### Scheduler REST (**`-tags=http,scheduler`**)
 

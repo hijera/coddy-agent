@@ -1,4 +1,7 @@
-package memory
+//go:build memory
+
+// Package memstorage reads and writes long-term memory files under global and project roots.
+package memstorage
 
 import (
 	"fmt"
@@ -47,6 +50,11 @@ func NewStore(m *config.MemoryConfig, p config.Paths, cwd string) (*Store, error
 	}
 	proj := filepath.Join(cwd, "memory")
 	return &Store{globalRoot: filepath.Clean(g), projectRoot: filepath.Clean(proj)}, nil
+}
+
+// NewWithRoots builds a store from explicit filesystem roots (tests and narrow call sites).
+func NewWithRoots(globalRoot, projectRoot string) *Store {
+	return &Store{globalRoot: filepath.Clean(globalRoot), projectRoot: filepath.Clean(projectRoot)}
 }
 
 func (s *Store) GlobalRoot() string  { return s.globalRoot }
@@ -471,11 +479,39 @@ func (s *Store) WriteFlexible(scope, title, relativeInner, body string) (written
 	return lab + ":" + filepath.ToSlash(toShow), nil
 }
 
-// Delete removes a memory file by scope:relative path.
+// Delete removes a memory file or an entire directory tree under the scope root by scope:relative path.
+// Deleting the scope root itself (for example global: or global:.) is not allowed.
 func (s *Store) Delete(rel string) error {
+	rel = strings.TrimSpace(rel)
+	rel = filepath.ToSlash(rel)
+	if rel == "" || strings.Contains(rel, "..") {
+		return fmt.Errorf("invalid path")
+	}
+	parts := strings.SplitN(rel, ":", 2)
+	if len(parts) != 2 {
+		return fmt.Errorf("path must be scope:relative form, got %q", rel)
+	}
+	inner := strings.TrimSpace(parts[1])
+	if inner == "" || inner == "." {
+		return fmt.Errorf("cannot delete scope root")
+	}
 	abs, err := s.resolveReadable(rel)
 	if err != nil {
 		return err
+	}
+	_, root, err := s.resolveScopeRoot(parts[0])
+	if err != nil {
+		return err
+	}
+	if filepath.Clean(abs) == filepath.Clean(root) {
+		return fmt.Errorf("cannot delete scope root")
+	}
+	fi, err := os.Stat(abs)
+	if err != nil {
+		return err
+	}
+	if fi.IsDir() {
+		return os.RemoveAll(abs)
 	}
 	return os.Remove(abs)
 }

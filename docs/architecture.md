@@ -134,6 +134,17 @@ Agents see:
 
 `run_command`, optional write paths, and out-of-tree paths still go through **`session/request_permission`** as before.
 
+### Optional `external` tool packages (scheduler, memory)
+
+Some features live under **`external/`** and define tools that are **not** registered through **`internal/tools.NewRegistry`**, but still use the same **`internal/tooling.Tool`** shape as the core harness.
+
+**Contract (mirror `external/scheduler/tools/job_get.go`):**
+
+1. **One tool per file** - a package-local constructor returns **`*tooling.Tool`** with **`Definition`** (name, description, **`InputSchema`**) and **`Execute`** in one place. **`Execute`** takes **`context.Context`**, JSON args as a string, and **`*tooling.Env`** (use **`CWD`** or other fields when the tool needs session context; pass **`&tooling.Env{}`** when unused).
+2. **JSON schema maps** - prefer **`map[string]interface{}`** for **`InputSchema`** and **`[]interface{}`** for **`required`** and enum lists so OpenAI and Anthropic marshaling stay consistent with existing scheduler tools.
+3. **`register.go`** - collects constructors. **`external/scheduler/tools`** exposes **`RegisterTools`** for the main agent registry. **`external/memory/tools`** exposes **`PersistTools`**, **`RecallTools`**, **`ToolDefinitions`**, and **`Exec`** because the memory copilot runs a separate LLM loop in **`external/memory/copilot.go`**.
+4. **Naming** - scheduler files use the **`job_*.go`** prefix; memory tool bodies use the **`mem_*.go`** prefix; **`external/memory/tools`** keeps **`env.go`**, **`names.go`**, **`register.go`** without the **`mem_`** prefix.
+
 ### MCP Client (`internal/mcp`)
 
 Connects to external MCP servers specified in `session/new`. Supports:
@@ -179,7 +190,7 @@ Top level after **`git clone`** (folder name is arbitrary; **`coddy-agent`** is 
 ├── cmd/coddy/                   # CLI entry (acp, http, sessions, skills)
 ├── internal/                    # core harness (acp, session, agent, config, tools, …)
 ├── external/
-│   ├── memory/                  # long-term memory copilot (always linked into coddy)
+│   ├── memory/                  # long-term memory copilot (`-tags memory`)
 │   ├── httpserver/              # optional REST gateway (build tag http)
 │   ├── ui/                      # Vite SPA sources (embedded when built with http+ui)
 │   └── scheduler/               # optional cron runner (build tag scheduler)
@@ -193,4 +204,4 @@ Top level after **`git clone`** (folder name is arbitrary; **`coddy-agent`** is 
 └── README.md
 ```
 
-Optional layers **`external/httpserver`**, **`external/ui`**, and **`external/scheduler`** are omitted from the binary unless you pass the matching **Go build tags**; see **`docs/build.md`** and **`README.md`**. **`external/memory`** is linked by default and is toggled at runtime with **`memory.enabled`**.
+Optional layers **`external/httpserver`**, **`external/ui`**, **`external/scheduler`**, and **`external/memory`** are omitted from the binary unless you pass the matching **Go build tags**; see **`docs/build.md`** and **`README.md`**. Long-term memory runtime behavior is toggled with **`memory.enabled`** when the binary was built with **`memory`**.

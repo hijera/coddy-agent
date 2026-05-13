@@ -631,6 +631,7 @@ func openAPISpec() map[string]interface{} {
 		},
 	}
 	mergeOpenAPISchedulerDoc(&doc)
+	mergeOpenAPIMemoryDoc(&doc)
 	return doc
 }
 

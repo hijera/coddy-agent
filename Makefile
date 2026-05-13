@@ -2,16 +2,16 @@
 
 # ---- Build options (extend when you add optional Go build tags) ----
 #   TAGS   optional extra `go build -tags` values (space-separated).
-#     Recommended full binary (matches default Docker BUILD_TAGS): make build TAGS="http ui scheduler"
+#     Recommended full binary (matches default Docker BUILD_TAGS): make build TAGS="http ui scheduler memory"
 #     http     OpenAI-compatible gateway (coddy http)
 #     ui       embedded SPA for GET / (combine with http); runs npm ui-build first
 #     scheduler   cron scheduler daemon and tools (see external/scheduler/)
+#     memory   long-term memory copilot and /coddy memory REST (see external/memory/)
 #   Examples: make build TAGS=http
 #             make build TAGS="http ui"
 #             make build TAGS="http scheduler"
-#             make build TAGS="http ui scheduler"
-#   Long-term memory lives in external/memory and is always linked into coddy. Turn it on or off at
-#   runtime with memory.enabled in config.yaml (no separate memory binary).
+#             make build TAGS="http ui scheduler memory"
+#   Omit memory (or other tags) for a slimmer binary; runtime memory.enabled only applies when built with memory.
 #   VERSION / LDFLAGS   embedded version string (see print-version).
 
 # Prefer a tag that points at HEAD (semantically latest if several), else nearest tag from history,
@@ -44,7 +44,7 @@ ui-build:
 	npm --prefix external/ui install --no-fund --no-audit
 	npm --prefix external/ui run build:go
 
-# Build the coddy CLI (skills commands + ACP entrypoint; includes external/memory).
+# Build the coddy CLI (skills commands + ACP entrypoint; optional modules via TAGS).
 build:
 	@mkdir -p $(BUILD_DIR)
 	go build $(GO_TAGS_FLAG) -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/coddy/
@@ -64,12 +64,18 @@ install: build
 # Run all tests.
 test:
 	go test ./...
+	go test -tags=memory ./...
 	go test -tags=http ./...
+	go test -tags=http,memory ./...
 	go test -tags=scheduler ./...
+	go test -tags=scheduler,memory ./...
 	$(MAKE) ui-build
 	go test -tags=http,ui ./...
+	go test -tags=http,ui,memory ./...
 	go test -tags=http,scheduler ./...
+	go test -tags=http,scheduler,memory ./...
 	go test -tags=http,scheduler,ui ./...
+	go test -tags=http,scheduler,ui,memory ./...
 
 # Clean build artifacts.
 clean:

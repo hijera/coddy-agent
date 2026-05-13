@@ -57,16 +57,16 @@ drive it from automation instead of an IDE.
 go install github.com/EvilFreelancer/coddy-agent/cmd/coddy@latest
 ```
 
-That builds whatever the module ships **without** custom `-tags`. For **`coddy http`**, the bundled SPA, and scheduler tools together, **build from source** with the tags below (same defaults as [`Dockerfile`](Dockerfile) / [`docker-compose.yml`](docker-compose.yml)).
+That builds whatever the module ships **without** custom `-tags`. For **`coddy http`**, the bundled SPA, scheduler, and long-term memory together, **build from source** with the tags below (same defaults as [`Dockerfile`](Dockerfile) / [`docker-compose.yml`](docker-compose.yml)).
 
 **Recommended full binary from source (HTTP + UI + scheduler + memory)**
 
-Long-term memory is **always linked**; optional HTTP, SPA, and scheduler use build tags (see [Build tags](#build-tags)).
+Pass the **`memory`** build tag to link long-term memory; optional HTTP, SPA, and scheduler use their own tags (see [Build tags](#build-tags)). Runtime **`memory.enabled`** in YAML only applies when the binary includes **`memory`**.
 
 ```bash
 git clone https://github.com/EvilFreelancer/coddy-agent
 cd coddy-agent
-make build TAGS="http ui scheduler"
+make build TAGS="http ui scheduler memory"
 ```
 
 The CLI is written to **`build/coddy`** (not the repo root).
@@ -74,7 +74,7 @@ The CLI is written to **`build/coddy`** (not the repo root).
 **Install `build/coddy` onto your PATH**
 
 ```bash
-make install TAGS="http ui scheduler"
+make install TAGS="http ui scheduler memory"
 ```
 
 - **root** - **`/usr/local/bin/coddy`**
@@ -83,7 +83,7 @@ make install TAGS="http ui scheduler"
 **Build without installing**
 
 ```bash
-make build TAGS="http ui scheduler"
+make build TAGS="http ui scheduler memory"
 ```
 
 **Manual `go build` (same as Makefile)**
@@ -93,7 +93,7 @@ When **`TAGS`** includes **`http`** and **`ui`**, run **`make ui-build`** first 
 ```bash
 make ui-build   # required before go build when using -tags=...,ui,... with http
 VERSION="$(make -s print-version)"
-go build -tags=http,ui,scheduler \
+go build -tags=http,ui,scheduler,memory \
   -ldflags "-X github.com/EvilFreelancer/coddy-agent/internal/version.Version=${VERSION}" \
   -o build/coddy \
   ./cmd/coddy/
@@ -113,11 +113,11 @@ The agent speaks ACP over stdio. Editors launch **`coddy`** once it is configure
 
 ### Build tags
 
-Use **`Makefile`** variable **`TAGS`** with **spaces** (**`make build TAGS="http ui scheduler"`**). **`go build`** uses **commas** (**`-tags=http,ui,scheduler`**).
+Use **`Makefile`** variable **`TAGS`** with **spaces** (**`make build TAGS="http ui scheduler memory"`**). **`go build`** uses **commas** (**`-tags=http,ui,scheduler,memory`**).
 
 | Tag | Enables | Docs |
 |-----|---------|------|
-| *(always linked)* | Memory copilot (**`memory.enabled`** in YAML) | [`external/memory/README.md`](external/memory/README.md) |
+| **`memory`** | Long-term memory copilot (**`memory.enabled`** in YAML); with **`http`**, session memory REST under **`/coddy/sessions/{id}/memory/*`** | [`external/memory/README.md`](external/memory/README.md) |
 | **`http`** | **`coddy http`**, REST gateway, **`/docs`**, **`/openapi.yaml`** | [`docs/http-api.md`](docs/http-api.md) |
 | **`ui`** | Embedded SPA on **`/`** (needs **`http`**) | [`docs/ui/README.md`](docs/ui/README.md), [`DESIGN.md`](DESIGN.md) |
 | **`scheduler`** | Scheduler daemon and **`coddy_scheduler_*`** tools; with **`http`**, **`/coddy/scheduler`** REST | [`docs/scheduler.md`](docs/scheduler.md), [`external/scheduler/README.md`](external/scheduler/README.md) |
@@ -126,7 +126,7 @@ Extended narrative and Docker alignment - **[docs/build.md](docs/build.md)**.
 
 ### Docker
 
-**[docs/docker.md](docs/docker.md)** describes **`docker compose`** (image build args, volumes, smoke script **`examples/httpserver/docker.sh`**). Default image tags match the recommended full binary (**`http`**, **`scheduler`**, **`ui`**).
+**[docs/docker.md](docs/docker.md)** describes **`docker compose`** (image build args, volumes, smoke script **`examples/httpserver/docker.sh`**). Default image tags match the recommended full binary (**`http`**, **`scheduler`**, **`ui`**, **`memory`**).
 
 ### Paths (`CODDY_HOME`, `CODDY_CWD`)
 
@@ -330,7 +330,7 @@ make test
 # Example harnesses (see examples/README.md): ./examples/build_coddy.sh && ./examples/test_acp.sh && ./examples/test_httpserver.sh
 
 # Full-featured local binary (HTTP + UI + scheduler), same defaults as Docker
-make build TAGS="http ui scheduler"
+make build TAGS="http ui scheduler memory"
 
 ./build/coddy -v    # same as --version
 

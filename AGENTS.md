@@ -11,11 +11,11 @@ Short map for automation-friendly contributors.
 | `internal/session` | Session manager, Filesystem persistence, Acp hooks. |
 | `external/httpserver` | **`coddy http`** when built with **`tags=http`** (SSE bridge,Swagger statics,`/coddy` REST,ServeMux wiring). |
 | `external/ui` | Embedded SPA (`go:embed`) when built with **`tags=http,ui`**. |
-| `external/memory` | Long-term memory copilot tooling (see README there). |
+| `external/memory` | Long-term memory copilot (**`-tags memory`**; see README there). |
 
 ## Builds
 
-Run **`make build TAGS=http`** for the HTTP gateway only (**`coddy http`** REST and **`/docs`**, no **npm**). Run **`make build TAGS="http ui"`** to link the embedded SPA (**Makefile** runs **ui-build** before **go build**). Default **`make build`** omits HTTPServer to keep dependency surface lean.
+Run **`make build TAGS=http`** for the HTTP gateway only (**`coddy http`** REST and **`/docs`**, no **npm**). Run **`make build TAGS="http ui"`** to link the embedded SPA (**Makefile** runs **ui-build** before **go build**). Recommended full image matches **`Dockerfile`** (**`make build TAGS="http ui scheduler memory"`**). Default **`make build`** omits HTTPServer, scheduler, and memory to keep dependency surface lean.
 
 Primary conversational surface for bundled UI lives at **`POST /v1/responses`** with **`stream:true`**. Prefer it over **`POST /v1/chat/completions`** when shipping Coddy-hosted experiences.
 
@@ -47,7 +47,7 @@ The composer exposes **`Mode`** (**`agent`** / **`plan`**) and a separate **`Mod
 
 See **`examples/README.md`** for layout (**`examples/httpserver/`**, **`examples/acp/`**, **`examples/shared/`**). Scripts may use a project-local interpreter (`.venv` recommended); follow each script header for prerequisites.
 
-- **`examples/build_coddy.sh`** - runs **`make build TAGS="http scheduler"`** and prints **`coddy -v`**. Pass **`TAGS="http ui"`** or adjust tags as needed for your **`./build/coddy`**.
+- **`examples/build_coddy.sh`** - runs **`make build TAGS="http scheduler memory"`** (override **`TAGS`** as needed) and prints **`coddy -v`**.
 - **`examples/test_acp.sh`** - wrapper that runs **`examples/acp/test_acp.sh`** (all ACP **`acp_*.py`** demos in one pass).
 - **`examples/test_httpserver.sh`** - wrapper that runs **`examples/httpserver/test_httpserver.sh`** (temp **`coddy http`**, all HTTP harnesses including **`http_e2e_scheduler_api`** and **`http_e2e_scheduler_agent`**).
 

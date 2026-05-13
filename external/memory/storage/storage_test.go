@@ -1,19 +1,138 @@
-package memory
+//go:build memory
+
+package memstorage
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"testing"
-
-	"github.com/EvilFreelancer/coddy-agent/internal/config"
 )
 
+func TestStoreSearch(t *testing.T) {
+	tmp := t.TempDir()
+	g := filepath.Join(tmp, "g")
+	p := filepath.Join(tmp, "p")
+	if err := os.MkdirAll(g, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(p, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(g, "prefs.md"), []byte("User prefers tabs and Go modules"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(p, "proj.md"), []byte("This repo uses Makefile for build"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st := NewWithRoots(g, p)
+	hits, err := st.Search("tabs golang", "both", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) < 1 {
+		t.Fatalf("expected hits, got %d", len(hits))
+	}
+}
+
+func TestStoreWriteFlexibleNestedAndList(t *testing.T) {
+	tmp := t.TempDir()
+	g := filepath.Join(tmp, "g")
+	p := filepath.Join(tmp, "p")
+	st := NewWithRoots(g, p)
+
+	written, err := st.WriteFlexible("global", "API", "design/auth-notes.md", "body line")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if written != "global:design/auth-notes.md" {
+		t.Fatalf("written %q", written)
+	}
+	nodes, err := st.ListOneLevel("global", "design")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, n := range nodes {
+		if n.Kind == "file" && n.Name == "auth-notes.md" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("list nodes %#v", nodes)
+	}
+	if err := st.Mkdir("global", "preferences"); err != nil {
+		t.Fatal(err)
+	}
+	nodes2, err := st.ListOneLevel("global", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	okDir := false
+	for _, n := range nodes2 {
+		if n.Name == "preferences" && n.Kind == "dir" {
+			okDir = true
+		}
+	}
+	if !okDir {
+		t.Fatalf("expected preferences dir %#v", nodes2)
+	}
+}
+
+func TestStoreRejectTraversalDotDot(t *testing.T) {
+	g := filepath.Join(t.TempDir(), "gonly")
+	st := NewWithRoots(g, filepath.Join(t.TempDir(), "ponly"))
+	if _, err := st.WriteFlexible("global", "x", "../evil.md", "y"); err == nil {
+		t.Fatal("expected error")
+	}
+	if _, err := st.Read("global:../x"); err == nil {
+		t.Fatal("expected error")
+	}
+	if err := st.Mkdir("global", ".."); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestDeleteRemovesDirectoryTree(t *testing.T) {
+	tmp := t.TempDir()
+	g := filepath.Join(tmp, "g")
+	p := filepath.Join(tmp, "p")
+	st := NewWithRoots(g, p)
+	if err := st.Mkdir("global", "notes"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.WriteFlexible("global", "t", "notes/a.md", "body"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Delete("global:notes"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(g, "notes")); !os.IsNotExist(err) {
+		t.Fatalf("expected notes tree gone: %v", err)
+	}
+}
+
+func TestDeleteRefusesScopeRoot(t *testing.T) {
+	st := NewWithRoots(t.TempDir(), t.TempDir())
+	for _, rel := range []string{"global:", "global:.", "project:", "project:."} {
+		if err := st.Delete(rel); err == nil {
+			t.Fatalf("expected error for %q", rel)
+		}
+	}
+}
+
+func TestSlugify(t *testing.T) {
+	if g := slugify("  Hello World!!  "); g != "hello-world" {
+		t.Fatalf("got %q", g)
+	}
+	if g := slugify(""); g != "note" {
+		t.Fatalf("got %q", g)
+	}
+}
+
 // extractMemoryLinkTargets finds scope:relative references suitable for coddy_memory_read.
-// Matches bare paths (global:x.md) and Markdown links [](global:x.md).
 func extractMemoryLinkTargets(body string) []string {
 	raw := regexp.MustCompile(`\b(global|project):([a-zA-Z0-9_./\-]+\.(?:md|txt))\b`)
 	mdHref := regexp.MustCompile(`\[[^\]]*]\(((?:global|project):[a-zA-Z0-9_./\-]+\.(?:md|txt))\)`)
@@ -51,7 +170,6 @@ func sliceContains(xs []string, s string) bool {
 	return false
 }
 
-// memoryTreeFixture builds a hierarchical global memory tree with cross-linked markdown notes.
 func memoryTreeFixture(t *testing.T, globalRoot string) {
 	t.Helper()
 	layout := []struct {
@@ -94,8 +212,6 @@ func memoryTreeFixture(t *testing.T, globalRoot string) {
 	}
 }
 
-// simulateLinkWalkRecall walks memory like a deterministic recall sub-agent without an LLM:
-// breadth-first reads from seeds, parses links from bodies, repeats until substring is found or maxReads.
 func simulateLinkWalkRecall(st *Store, seeds []string, maxReads int, wantSubstring string) (pathOrder []string, found bool, err error) {
 	queued := append([]string(nil), seeds...)
 	sort.Strings(queued)
@@ -131,12 +247,6 @@ func simulateLinkWalkRecall(st *Store, seeds []string, maxReads int, wantSubstri
 	return pathOrder, found, nil
 }
 
-func testMemoryConfigPtr() *config.MemoryConfig {
-	m := &config.MemoryConfig{}
-	m.ApplyDefaults()
-	return m
-}
-
 func TestExtractMemoryLinkTargets(t *testing.T) {
 	body := "[a](global:docs/x.md) and bare global:guides/y.txt.\nAlso [b](global:topics/z.md) tail.\n"
 	got := extractMemoryLinkTargets(body)
@@ -168,7 +278,7 @@ func TestSearchBootstrapsTreeEntryThenLinkedWalkFindsBuriedLeaf(t *testing.T) {
 		t.Fatal(err)
 	}
 	memoryTreeFixture(t, g)
-	st := &Store{globalRoot: g, projectRoot: proj}
+	st := NewWithRoots(g, proj)
 
 	hits, err := st.Search("hub navigation coddy start recall", "global", 10)
 	if err != nil {
@@ -213,7 +323,7 @@ func TestSearchIntermediateQueryThenWalkReachesVault(t *testing.T) {
 		t.Fatal(err)
 	}
 	memoryTreeFixture(t, g)
-	st := &Store{globalRoot: g, projectRoot: p}
+	st := NewWithRoots(g, p)
 
 	firstHits, err := st.Search("services overview routes sketch", "global", 5)
 	if err != nil {
@@ -232,95 +342,5 @@ func TestSearchIntermediateQueryThenWalkReachesVault(t *testing.T) {
 	}
 	if !sliceContains(order, "global:topics/services/api-map.md") {
 		t.Fatalf("expected api-map in pathOrder=%v", order)
-	}
-}
-
-// TestSequentialSearchReadChain emulates alternating search and read hops an LLM could take.
-func TestSequentialSearchReadChain(t *testing.T) {
-	const secret = "ANSWER_UNIQUE_TOKEN_XYZZY_42"
-	cfg := testMemoryConfigPtr()
-	tmp := t.TempDir()
-	g := filepath.Join(tmp, "g")
-	p := filepath.Join(tmp, "p")
-	if err := os.MkdirAll(g, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(p, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	memoryTreeFixture(t, g)
-	st := &Store{globalRoot: g, projectRoot: p}
-
-	toolHits, err := execTool(st, cfg, "coddy_memory_search", `{"query":"hub navigation coddy","scope":"global"}`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(toolHits, "global:index.md") {
-		t.Fatalf("search tool: %s", toolHits)
-	}
-	idxBody, err := execTool(st, cfg, "coddy_memory_read", `{"path":"global:index.md"}`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pathsIdx := extractMemoryLinkTargets(idxBody)
-	if len(pathsIdx) == 0 {
-		t.Fatal("index should expose outbound links")
-	}
-	var overviewPath string
-	for _, pth := range pathsIdx {
-		if strings.Contains(pth, "overview.md") {
-			overviewPath = pth
-			break
-		}
-	}
-	if overviewPath == "" {
-		t.Fatalf("no overview in %v", pathsIdx)
-	}
-	ovPayload, err := json.Marshal(map[string]string{"path": overviewPath})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ovBody, err := execTool(st, cfg, "coddy_memory_read", string(ovPayload))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var apiPath string
-	for _, pth := range extractMemoryLinkTargets(ovBody) {
-		if strings.Contains(pth, "api-map.md") {
-			apiPath = pth
-			break
-		}
-	}
-	if apiPath == "" {
-		t.Fatalf("overview should link to api map, body=%s", ovBody)
-	}
-	apiPayload, err := json.Marshal(map[string]string{"path": apiPath})
-	if err != nil {
-		t.Fatal(err)
-	}
-	apiBody, err := execTool(st, cfg, "coddy_memory_read", string(apiPayload))
-	if err != nil {
-		t.Fatal(err)
-	}
-	gotVault := false
-	for _, pth := range extractMemoryLinkTargets(apiBody) {
-		if pth != "global:topics/secrets/vault.md" {
-			continue
-		}
-		gotVault = true
-		pl, jerr := json.Marshal(map[string]string{"path": pth})
-		if jerr != nil {
-			t.Fatal(jerr)
-		}
-		vaultBody, rerr := execTool(st, cfg, "coddy_memory_read", string(pl))
-		if rerr != nil {
-			t.Fatal(rerr)
-		}
-		if !strings.Contains(vaultBody, secret) {
-			t.Fatalf("vault body missing secret: %q", vaultBody)
-		}
-	}
-	if !gotVault {
-		t.Fatalf("api-map should reference vault.md, body=%s", apiBody)
 	}
 }

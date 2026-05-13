@@ -21,7 +21,7 @@ RUN go mod download
 COPY . .
 
 ARG VERSION=dev
-ARG BUILD_TAGS=http,scheduler,ui
+ARG BUILD_TAGS=http,scheduler,ui,memory
 
 ENV CGO_ENABLED=0
 ENV GOOS=linux

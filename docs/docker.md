@@ -1,6 +1,6 @@
 # Docker
 
-Run Coddy as **`coddy http`** inside a minimal **`scratch`** image. Memory support is always compiled in (same as local **`make build`**); HTTP, embedded UI, and scheduler are controlled by **Go build tags**, mirrored by **`BUILD_TAGS`** / **`CODDY_BUILD_TAGS`**.
+Run Coddy as **`coddy http`** inside a minimal **`scratch`** image. Optional features (**`http`**, **`ui`**, **`scheduler`**, **`memory`**) are controlled by **Go build tags**, mirrored by **`BUILD_TAGS`** / **`CODDY_BUILD_TAGS`** (default full image includes all four).
 
 Related files:
 
@@ -18,14 +18,14 @@ General build instructions without Docker - **[docs/build.md](build.md)**.
 
 ## What the image contains by default
 
-**`Dockerfile`** **`ARG BUILD_TAGS`** defaults to **`http,scheduler,ui`** (comma-separated, same meaning as **`go build -tags=`**).
+**`Dockerfile`** **`ARG BUILD_TAGS`** defaults to **`http,scheduler,ui,memory`** (comma-separated, same meaning as **`go build -tags=`**).
 
 - **`http`** - **`coddy http`** and REST gateway (see **[docs/http-api.md](http-api.md)**).
 - **`ui`** - embedded SPA on **`/`** (needs **`http`**).
 - **`scheduler`** - scheduler subsystem (**[docs/scheduler.md](scheduler.md)**).
-- Memory copilot - always linked; toggle at runtime via **`memory.enabled`** (**[external/memory/README.md](../external/memory/README.md)**).
+- **`memory`** - long-term memory copilot and session memory REST (**[external/memory/README.md](../external/memory/README.md)**); toggle runtime behavior via **`memory.enabled`**.
 
-To build an image **without** the embedded UI (still **`http`**), override **`BUILD_TAGS`** (for example **`http,scheduler`**) via **`docker compose` `args`** or **`docker build --build-arg`**.
+To build an image **without** memory or the embedded UI, override **`BUILD_TAGS`** (for example **`http,scheduler,ui`** or **`http,scheduler`**) via **`docker compose` `args`** or **`docker build --build-arg`**.
 
 ## Build the image
 
@@ -39,7 +39,7 @@ Optional version label and tags (same variables **`docker-compose.yml`** uses):
 
 ```bash
 export CODDY_VERSION="$(git describe --tags --dirty 2>/dev/null || echo dev)"
-export CODDY_BUILD_TAGS="http,scheduler,ui"
+export CODDY_BUILD_TAGS="http,scheduler,ui,memory"
 docker compose build coddy
 ```
 

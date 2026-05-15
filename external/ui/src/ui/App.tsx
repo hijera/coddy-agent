@@ -26,6 +26,13 @@ import {
   mergeTranscriptPreferLocalSuffix,
 } from "./chat/transcriptServerSnapshot";
 import { reattachLocalQuestionPrompts } from "./chat/transcriptQuestionReattach";
+import {
+  clearQuestionPromptRecords,
+  mergeStoredQuestionPromptsIntoTranscript,
+  patchQuestionToolArgsFromPromptRecords,
+  pickRicherQuestionToolArgs,
+  upsertQuestionPromptRecord,
+} from "./chat/questionPromptSessionStore";
 import { transcriptHasFilledAssistant } from "./chat/streamSyncLocalAssistant";
 import { stableMemoryCopilotItemId } from "./chat/memoryStableId";
 import type { TokenUsage, TranscriptItem } from "./chat/types";
@@ -628,8 +635,12 @@ export function App() {
       if (!p) return;
       const key = p.sessionId.trim();
       if (!key) return;
+      upsertQuestionPromptRecord(key, {
+        requestId: p.requestId.trim(),
+        payload: p,
+      });
       applyStreamItemsForSession(key, (prev) => {
-        const rid = p.requestId;
+        const ridInner = p.requestId;
         const withoutStalePending = prev.filter(
           (x) =>
             !(
@@ -639,12 +650,12 @@ export function App() {
         );
         const withoutDup = withoutStalePending.filter(
           (x) =>
-            !(x.type === "question_prompt" && x.payload.requestId === rid),
+            !(x.type === "question_prompt" && x.payload.requestId === ridInner),
         );
         return [
           ...withoutDup,
           {
-            id: newId("qp"),
+            id: `qp_${ridInner}`,
             type: "question_prompt" as const,
             payload: p,
           },
@@ -662,13 +673,26 @@ export function App() {
     ) => {
       const key = sessionId.trim();
       if (!key) return;
-      applyStreamItemsForSession(key, (prev) =>
-        prev.map((x) =>
+      applyStreamItemsForSession(key, (prev) => {
+        const next = prev.map((x) =>
           x.id === itemId && x.type === "question_prompt"
             ? { ...x, resolved }
             : x,
-        ),
-      );
+        );
+        const hit = next.find(
+          (x) => x.id === itemId && x.type === "question_prompt",
+        );
+        if (hit?.type === "question_prompt") {
+          upsertQuestionPromptRecord(key, {
+            requestId: hit.payload.requestId.trim(),
+            payload: hit.payload,
+            ...(hit.resolved !== undefined
+              ? { resolved: hit.resolved }
+              : {}),
+          });
+        }
+        return next;
+      });
     },
     [],
   );
@@ -1409,7 +1433,14 @@ export function App() {
         };
         if (title) merged.title = title;
         if (kind) merged.kind = kind;
-        if (row.argsPreview) merged.argsText = row.argsPreview;
+        if (row.argsPreview) {
+          const titleLower = (title || "").trim().toLowerCase();
+          const pickedArgs =
+            titleLower === "question"
+              ? pickRicherQuestionToolArgs(cur.argsText, row.argsPreview)
+              : row.argsPreview;
+          if (pickedArgs) merged.argsText = pickedArgs;
+        }
         if (row.resultPreview) merged.resultText = row.resultPreview;
         if (row.resultPreviewTruncated === true)
           merged.resultWasTruncated = true;
@@ -1430,7 +1461,9 @@ export function App() {
           ? itemsRef.current
           : undefined;
     const mergedBase = mergeTranscriptPreferLocalSuffix(next, localForMerge);
-    const merged = reattachLocalQuestionPrompts(mergedBase, localForMerge);
+    let merged = reattachLocalQuestionPrompts(mergedBase, localForMerge);
+    merged = mergeStoredQuestionPromptsIntoTranscript(merged, sid);
+    merged = patchQuestionToolArgsFromPromptRecords(merged, sid);
     const applied =
       keepLocalTranscriptIfServerEmpty({
         serverNext: merged,
@@ -1472,6 +1505,7 @@ export function App() {
       return;
     }
     armSessionDeleteBackdropSuppressUntil(sessionDeleteBackdropSuppressUntilRef);
+    clearQuestionPromptRecords(id);
     await fetch(`/coddy/sessions/${encodeURIComponent(id)}`, {
       method: "DELETE",
       headers,

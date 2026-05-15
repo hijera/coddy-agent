@@ -3536,25 +3536,31 @@ label.question-prompt-row {
     border-color 120ms ease;
 }
 
-button.question-prompt-row:hover {
+button.question-prompt-row:not(.question-prompt-row--active):hover {
   background: rgba(255, 255, 255, 0.05);
   border-color: rgba(255, 255, 255, 0.16);
 }
 
-label.question-prompt-row:hover {
+label.question-prompt-row:not(.question-prompt-row--active):hover {
   background: rgba(255, 255, 255, 0.05);
   border-color: rgba(255, 255, 255, 0.16);
 }
 
 .question-prompt-row--active {
-  border-color: rgba(147, 51, 234, 0.45);
-  background: rgba(147, 51, 234, 0.1);
+  border-color: rgba(147, 51, 234, 0.55);
+  background: rgba(147, 51, 234, 0.3);
 }
 
 .question-prompt-row--active .question-prompt-bubble {
-  border-color: rgba(147, 51, 234, 0.55);
-  background: rgba(147, 51, 234, 0.18);
-  color: rgba(255, 255, 255, 0.94);
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(147, 51, 234, 0.5);
+  color: rgba(255, 255, 255, 0.98);
+}
+
+label.question-prompt-row.question-prompt-row--active:hover,
+button.question-prompt-row.question-prompt-row--active:hover {
+  background: rgba(147, 51, 234, 0.36);
+  border-color: rgba(147, 51, 234, 0.68);
 }
 
 .question-prompt-bubble {
@@ -3601,13 +3607,13 @@ label.question-prompt-row:hover {
   align-items: center;
 }
 
-.question-prompt-row--other:focus-within {
+.question-prompt-row--other:focus-within:not(.question-prompt-row--active) {
   border-color: rgba(147, 51, 234, 0.35);
 }
 
 .question-prompt-row--other.question-prompt-row--active {
-  border-color: rgba(147, 51, 234, 0.45);
-  background: rgba(147, 51, 234, 0.1);
+  border-color: rgba(147, 51, 234, 0.55);
+  background: rgba(147, 51, 234, 0.3);
 }
 
 .question-prompt-other-input {
@@ -3704,13 +3710,25 @@ label.question-prompt-row:hover {
   opacity: 0.85;
 }
 
-.question-prompt-collapsed .question-prompt-summary-line {
-  color: rgba(255, 255, 255, 0.72);
+.question-prompt-head--stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.question-prompt-head--stack .question-prompt-summary-line {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  max-width: none;
+  line-height: 1.45;
   font-weight: 500;
-  max-width: min(640px, 100%);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.74);
+}
+
+.question-prompt-card.question-prompt-collapsed
+  > summary.question-prompt-head.question-prompt-head--stack {
+  cursor: pointer;
 }
 
 .question-prompt-resolved-body {

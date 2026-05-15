@@ -279,7 +279,7 @@ export function QuestionPromptSection(props: QuestionPromptSectionProps) {
         data-test="question_prompt_resolved"
       >
         <details className="question-prompt-card question-prompt-collapsed">
-          <summary className="question-prompt-head">
+          <summary className="question-prompt-head question-prompt-head--stack">
             <div className="question-prompt-head-left">
               <span className="question-prompt-icon" aria-hidden />
               <span className="question-prompt-title">Questions</span>
@@ -401,6 +401,16 @@ export function QuestionPromptSection(props: QuestionPromptSectionProps) {
                             name={`${itemId}-pick-${qi}`}
                             checked={picked}
                             disabled={submitting}
+                            onMouseDown={(e) => {
+                              if (picked) {
+                                e.preventDefault();
+                                setSingleSel((prev) => {
+                                  const nx = [...prev];
+                                  nx[qi] = "";
+                                  return nx;
+                                });
+                              }
+                            }}
                             onChange={() => {
                               setSingleSel((prev) => {
                                 const nx = [...prev];
@@ -437,6 +447,21 @@ export function QuestionPromptSection(props: QuestionPromptSectionProps) {
                           name={`${itemId}-pick-${qi}`}
                           checked={singleSel[qi] === OTHER_SENTINEL}
                           disabled={submitting}
+                          onMouseDown={(e) => {
+                            if (singleSel[qi] === OTHER_SENTINEL) {
+                              e.preventDefault();
+                              setSingleSel((prev) => {
+                                const nx = [...prev];
+                                nx[qi] = "";
+                                return nx;
+                              });
+                              setExtraText((prev) => {
+                                const nx = [...prev];
+                                nx[qi] = "";
+                                return nx;
+                              });
+                            }
+                          }}
                           onChange={() => {
                             setSingleSel((prev) => {
                               const nx = [...prev];

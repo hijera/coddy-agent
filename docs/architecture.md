@@ -199,6 +199,7 @@ Top level after **`git clone`** (folder name is arbitrary; **`coddy-agent`** is 
 ├── docs/                        # guides (see docs/README.md)
 ├── Dockerfile
 ├── docker-compose.yml
+├── docker-compose.dev.yml
 ├── config.example.yaml
 ├── go.mod
 ├── go.sum

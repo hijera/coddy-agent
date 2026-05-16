@@ -10,7 +10,7 @@ This folder documents the embedded web UI.
 - **`http`** links the OpenAI-shaped HTTP gateway (**`coddy http`**, **`/v1/*`**, **`/coddy/*`**, Swagger). It does **not** embed the SPA. **`GET /`** returns a plain **404** hint.
 - **`http`** **+** **`ui`** (for example **`make build TAGS="http ui"`**, equivalent to **`go build -tags=http,ui`**) runs **`make ui-build`** first and links **`go:embed`** assets for **`/`**, **`/index.html`**, **`/app.js`**, **`/styles.css`**.
 - **`scheduler`** is independent (cron daemon and tools); combine with **`http`** or **`http,ui`** when you need **`coddy http`** and jobs in one binary.
-- **`Dockerfile`** / **`docker-compose.yml`** pass the same list as **`BUILD_TAGS`** (comma-separated, default **`http,scheduler,ui`**). The Node stage always produces a fresh UI bundle; **`ui`** in **`BUILD_TAGS`** controls whether the Go linker includes it.
+- **`Dockerfile`** / **`docker-compose.dev.yml`** pass the same list as **`BUILD_TAGS`** (comma-separated, default **`http,scheduler,ui`**). The Node stage always produces a fresh UI bundle; **`ui`** in **`BUILD_TAGS`** controls whether the Go linker includes it.
 
 ## Quick start
 

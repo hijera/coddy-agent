@@ -74,7 +74,7 @@ Coddy speaks **ACP as the server** over stdin/stdout. A compatible **client** mu
 go install github.com/EvilFreelancer/coddy-agent/cmd/coddy@latest
 ```
 
-That builds whatever the module ships **without** custom `-tags`. For **`coddy http`**, the bundled SPA, scheduler, and long-term memory together, **build from source** with the tags below (same defaults as [`Dockerfile`](Dockerfile) / [`docker-compose.yml`](docker-compose.yml)).
+That builds whatever the module ships **without** custom `-tags`. For **`coddy http`**, the bundled SPA, scheduler, and long-term memory together, **build from source** with the tags below (same defaults as [`Dockerfile`](Dockerfile) / [`docker-compose.dev.yml`](docker-compose.dev.yml)).
 
 **Recommended full binary from source (HTTP + UI + scheduler + memory)**
 
@@ -143,7 +143,36 @@ Extended narrative and Docker alignment - **[docs/build.md](docs/build.md)**.
 
 ### Docker
 
-**[docs/docker.md](docs/docker.md)** describes **`docker compose`** (image build args, volumes, smoke script **`examples/httpserver/docker.sh`**). Default image tags match the recommended full binary (**`http`**, **`scheduler`**, **`ui`**, **`memory`**).
+Release images are published on **[GitHub Container Registry](https://github.com/coddy-project/coddy-agent/pkgs/container/coddy-agent)** as **`ghcr.io/coddy-project/coddy-agent`** (tags such as **`latest`** and **`X.Y.Z`**). The default image includes **`http`**, **`ui`**, **`scheduler`**, and **`memory`** - the same feature set as **`make build TAGS="http ui scheduler memory"`**.
+
+**1. Config and workspace** (from the repo root, or any directory where you keep **`config.yaml`**):
+
+```bash
+cp config.example.yaml config.yaml
+mkdir -p workspace coddy_home
+# Edit config.yaml: at least one provider api_key (or rely on OPENAI_API_KEY etc. in compose)
+```
+
+**2. Start with Compose** (pull published image, no local build):
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+To **build the image locally** instead, use **`docker-compose.dev.yml`**: **`docker compose -f docker-compose.dev.yml up -d --build`**.
+
+**3. Open the bundled UI** in a browser on the host:
+
+```text
+http://127.0.0.1:12345/
+```
+
+The SPA is served on **`GET /`** by **`coddy http`**. Pick a **model** in the composer (YAML backends from **`GET /v1/models`**), choose **agent** or **plan** mode, then send a message - the UI creates a session and streams the reply via **`POST /v1/responses`**. Agent files and shell tools use the mounted workspace (**`./workspace`** → **`/workspace`** in the container). Live YAML editing: **`http://127.0.0.1:12345/#/settings`**.
+
+Sanity check without a browser: **`curl -sS http://127.0.0.1:12345/v1/models | head`**.
+
+There is **no login** on the HTTP surface - expose port **12345** only on trusted networks. Full compose options, volumes, and CI image tags: **[docs/docker.md](docs/docker.md)**. Smoke script: **`examples/httpserver/docker.sh`**.
 
 ### Paths (`CODDY_HOME`, `CODDY_CWD`)
 
@@ -307,7 +336,7 @@ See [Architecture docs](docs/architecture.md) for full details.
 ## Documentation
 
 - [Build from source](docs/build.md) - prerequisites, **`make build`**, **`TAGS`** vs **`go build -tags`**, **`build/coddy`**
-- [Docker](docs/docker.md) - **`Dockerfile`** and **`docker compose`**
+- [Docker](docs/docker.md) - GHCR image, **`docker compose`**, bundled UI at **`http://127.0.0.1:12345/`**
 - [Architecture](docs/architecture.md) - system design and component overview
 - [ACP Protocol](docs/acp-protocol.md) - protocol reference and message formats
 - [ReAct Agent](docs/react-agent.md) - ReAct loop design and tool specifications

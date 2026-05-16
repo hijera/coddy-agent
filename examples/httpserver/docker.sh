@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Smoke coddy http inside docker compose (see repo docker-compose.yml). Needs docker and docker compose.
+# Smoke coddy http inside docker compose (see repo docker-compose.dev.yml). Needs docker and docker compose.
 
 set -euo pipefail
 
@@ -21,7 +21,7 @@ export PORT
 
 TMP_DIR="$(mktemp -d -t coddy-docker-http-XXXXXX)"
 cleanup() {
-  docker compose -f docker-compose.yml down -v --remove-orphans >/dev/null 2>&1 || true
+  docker compose -f docker-compose.dev.yml down -v --remove-orphans >/dev/null 2>&1 || true
   if [[ "${KEEP_TMP:-0}" != "1" ]]; then
     rm -rf "$TMP_DIR" >/dev/null 2>&1 || true
   fi
@@ -67,7 +67,7 @@ fi
 
 export CODDY_CWD CODDY_HOME CODDY_CONFIG
 
-docker compose -f docker-compose.yml up -d --build coddy
+docker compose -f docker-compose.dev.yml up -d --build coddy
 
 ready=0
 for _ in $(seq 1 120); do
@@ -79,8 +79,8 @@ for _ in $(seq 1 120); do
 done
 if [[ "$ready" != 1 ]]; then
   echo "http server did not become ready on port ${PORT}" >&2
-  docker compose -f docker-compose.yml ps -a || true
-  docker compose -f docker-compose.yml logs coddy || true
+  docker compose -f docker-compose.dev.yml ps -a || true
+  docker compose -f docker-compose.dev.yml logs coddy || true
   exit 1
 fi
 

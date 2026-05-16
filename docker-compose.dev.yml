@@ -1,12 +1,18 @@
-# Run the published image from GitHub Container Registry (no local Dockerfile build).
-# See docs/docker.md and https://github.com/coddy-project/coddy-agent/pkgs/container/coddy-agent
+# Build Coddy from the local Dockerfile (for development and smoke tests).
+# See docs/docker.md
 #
-#   docker compose pull
-#   docker compose up -d
+#   docker compose -f docker-compose.dev.yml build
+#   docker compose -f docker-compose.dev.yml up -d --build
 
 services:
   coddy:
-    image: ghcr.io/coddy-project/coddy-agent:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${CODDY_VERSION:-dev}
+        BUILD_TAGS: ${CODDY_BUILD_TAGS:-http,scheduler,ui,memory}
+    image: coddy-agent:${CODDY_VERSION:-dev}
     ports:
       - "${CODDY_HTTP_PORT:-12345}:12345"
     working_dir: /workspace

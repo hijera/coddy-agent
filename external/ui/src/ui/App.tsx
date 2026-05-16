@@ -22,6 +22,7 @@ import {
 } from "./chat/questionTypes";
 import { pickStreamMutationBase } from "./chat/streamMutationBase";
 import {
+  dedupeAdjacentDuplicateThinkingCompleted,
   keepLocalTranscriptIfServerEmpty,
   mergeTranscriptPreferLocalSuffix,
 } from "./chat/transcriptServerSnapshot";
@@ -1464,7 +1465,7 @@ export function App() {
     let merged = reattachLocalQuestionPrompts(mergedBase, localForMerge);
     merged = mergeStoredQuestionPromptsIntoTranscript(merged, sid);
     merged = patchQuestionToolArgsFromPromptRecords(merged, sid);
-    const applied =
+    const appliedRaw =
       keepLocalTranscriptIfServerEmpty({
         serverNext: merged,
         sid,
@@ -1472,6 +1473,7 @@ export function App() {
         prevShadow,
         prevItems: itemsRef.current,
       }) ?? merged;
+    const applied = dedupeAdjacentDuplicateThinkingCompleted(appliedRaw);
     if (opts?.skipSetItems) {
       streamShadowBySidRef.current.set(sid, applied);
       return applied;

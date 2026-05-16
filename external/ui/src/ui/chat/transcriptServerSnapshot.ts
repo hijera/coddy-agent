@@ -62,6 +62,47 @@ export function transcriptItemsLooselyEqual(
   }
 }
 
+/** Collapse consecutive identical completed reasoning rows (e.g. after reload merge). */
+export function dedupeAdjacentDuplicateThinkingCompleted(
+  items: TranscriptItem[],
+): TranscriptItem[] {
+  const out: TranscriptItem[] = [];
+  for (const it of items) {
+    const prev = out[out.length - 1];
+    if (
+      prev?.type === "thinking" &&
+      it.type === "thinking" &&
+      prev.status === "completed" &&
+      it.status === "completed" &&
+      prev.content.trim() === it.content.trim()
+    ) {
+      let durationMs: number | undefined;
+      const pd =
+        typeof prev.durationMs === "number" &&
+        Number.isFinite(prev.durationMs) &&
+        prev.durationMs >= 0
+          ? prev.durationMs
+          : undefined;
+      const cd =
+        typeof it.durationMs === "number" &&
+        Number.isFinite(it.durationMs) &&
+        it.durationMs >= 0
+          ? it.durationMs
+          : undefined;
+      if (pd !== undefined || cd !== undefined) {
+        durationMs = Math.max(pd ?? 0, cd ?? 0);
+      }
+      out[out.length - 1] = {
+        ...prev,
+        ...(durationMs !== undefined ? { durationMs } : {}),
+      };
+      continue;
+    }
+    out.push(it);
+  }
+  return out;
+}
+
 /**
  * When the server list is a strict prefix of the local transcript (same rows up to
  * server length), append the local tail so the UI keeps streaming text until reload.

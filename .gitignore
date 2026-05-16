@@ -3,6 +3,7 @@
 /coddy_home
 /config.yaml
 /config.*.yaml
+/examples/config.*.yaml
 
 # Binaries
 build/

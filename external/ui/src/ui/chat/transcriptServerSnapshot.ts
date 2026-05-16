@@ -49,9 +49,58 @@ export function transcriptItemsLooselyEqual(
         (b as Extract<TranscriptItem, { type: "memory_copilot" }>).userTurnIndex ===
           a.userTurnIndex
       );
+    case "question_prompt": {
+      const asv = a as Extract<TranscriptItem, { type: "question_prompt" }>;
+      const bl = b as Extract<TranscriptItem, { type: "question_prompt" }>;
+      if (asv.payload.requestId !== bl.payload.requestId) return false;
+      if (bl.resolved && !asv.resolved) return true;
+      if (!!asv.resolved !== !!bl.resolved) return false;
+      return true;
+    }
     default:
       return false;
   }
+}
+
+/** Collapse consecutive identical completed reasoning rows (e.g. after reload merge). */
+export function dedupeAdjacentDuplicateThinkingCompleted(
+  items: TranscriptItem[],
+): TranscriptItem[] {
+  const out: TranscriptItem[] = [];
+  for (const it of items) {
+    const prev = out[out.length - 1];
+    if (
+      prev?.type === "thinking" &&
+      it.type === "thinking" &&
+      prev.status === "completed" &&
+      it.status === "completed" &&
+      prev.content.trim() === it.content.trim()
+    ) {
+      let durationMs: number | undefined;
+      const pd =
+        typeof prev.durationMs === "number" &&
+        Number.isFinite(prev.durationMs) &&
+        prev.durationMs >= 0
+          ? prev.durationMs
+          : undefined;
+      const cd =
+        typeof it.durationMs === "number" &&
+        Number.isFinite(it.durationMs) &&
+        it.durationMs >= 0
+          ? it.durationMs
+          : undefined;
+      if (pd !== undefined || cd !== undefined) {
+        durationMs = Math.max(pd ?? 0, cd ?? 0);
+      }
+      out[out.length - 1] = {
+        ...prev,
+        ...(durationMs !== undefined ? { durationMs } : {}),
+      };
+      continue;
+    }
+    out.push(it);
+  }
+  return out;
 }
 
 /**
@@ -76,6 +125,15 @@ export function mergeTranscriptPreferLocalSuffix(
   if (local.length === serverNext.length && minLen > 0) {
     const lastS = serverNext[serverNext.length - 1]!;
     const lastL = local[local.length - 1]!;
+    if (
+      lastS.type === "question_prompt" &&
+      lastL.type === "question_prompt" &&
+      lastS.payload.requestId === lastL.payload.requestId &&
+      lastL.resolved &&
+      !lastS.resolved
+    ) {
+      return [...serverNext.slice(0, -1), lastL];
+    }
     if (lastS.type === "assistant_message" && lastL.type === "assistant_message") {
       const sText = lastS.content;
       const lText = lastL.content;

@@ -6,6 +6,11 @@ import {
   useState,
 } from "react";
 
+import {
+  parseQuestionToolAnswersFromResult,
+  parseQuestionToolQuestionsFromArgs,
+} from "../chat/questionToolDisplay";
+
 function safePrettyJSON(text: string): string {
   try {
     const v = JSON.parse(text);
@@ -23,6 +28,54 @@ function formatDuration(ms: number): string {
     return `${fixed}m`;
   }
   return `${Math.round(ms)}ms`;
+}
+
+function QuestionToolTimelineReadout(props: {
+  argsText?: string | undefined;
+  resultText: string;
+  status: string;
+}) {
+  const qs = parseQuestionToolQuestionsFromArgs(props.argsText);
+  const terminal = ["completed", "failed", "cancelled"].includes(
+    (props.status || "").toLowerCase(),
+  );
+  const answers = parseQuestionToolAnswersFromResult(props.resultText);
+
+  if (qs.length === 0) {
+    return (
+      <p className="muted" style={{ margin: 0, fontSize: 13, lineHeight: 1.45 }}>
+        Answer using the Questions card in this chat. This row only mirrors the
+        tool state.
+      </p>
+    );
+  }
+
+  return (
+    <div
+      className="question-prompt-resolved-body"
+      aria-label="Question tool timeline"
+    >
+      {qs.map((item, qi) => (
+        <div
+          key={`${qi}-${item.question}`}
+          className={qi === 0 ? undefined : "question-prompt-resolved-block"}
+        >
+          <div className="question-prompt-resolved-pair">
+            <div className="question-prompt-resolved-q">{item.question}</div>
+            {terminal && (answers[qi] ?? []).filter(Boolean).length ? (
+              <div className="question-prompt-resolved-a">
+                {answers[qi]!.join(", ")}
+              </div>
+            ) : (
+              <div className="question-prompt-resolved-a muted">
+                Awaiting answer
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function ToolCallMessage(props: {
@@ -51,18 +104,30 @@ export function ToolCallMessage(props: {
   const rawName = (props.title || props.kind || "tool").trim();
   const status = (props.status || "").toLowerCase();
   const pendingLike = status === "pending" || status === "in_progress";
-  const displayLabel = pendingLike
-    ? `${rawName || "tool"}...`
-    : rawName || "tool";
+
+  const isQuestionTool =
+    rawName.toLowerCase() === "question" ||
+    (props.kind || "").toLowerCase() === "question";
+
+  const displayLabel = useMemo(() => {
+    if (isQuestionTool) {
+      return "question";
+    }
+    return pendingLike ? `${rawName || "tool"}...` : rawName || "tool";
+  }, [isQuestionTool, pendingLike, rawName]);
 
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
+    if (isQuestionTool) return;
     if (!pendingLike || typeof props.startedAtMs !== "number") return;
     const h = window.setInterval(() => setNowMs(Date.now()), 160);
     return () => window.clearInterval(h);
-  }, [pendingLike, props.startedAtMs]);
+  }, [isQuestionTool, pendingLike, props.startedAtMs]);
 
   const durationLabel = useMemo(() => {
+    if (isQuestionTool) {
+      return "";
+    }
     const terminal =
       status === "completed" || status === "failed" || status === "cancelled";
     if (terminal) {
@@ -88,7 +153,7 @@ export function ToolCallMessage(props: {
       return formatDuration(props.durationMs);
     }
     return "-";
-  }, [props.durationMs, props.startedAtMs, props.status, nowMs]);
+  }, [isQuestionTool, props.durationMs, props.startedAtMs, props.status, nowMs]);
 
   const [showExpanded, setShowExpanded] = useState(false);
   const [loadingFull, setLoadingFull] = useState(false);
@@ -99,6 +164,7 @@ export function ToolCallMessage(props: {
   }, [props.toolCallId]);
 
   const canExpand =
+    !isQuestionTool &&
     props.resultWasTruncated === true &&
     (status === "completed" || status === "failed" || status === "cancelled");
   const fetchFull = props.onFetchToolCallFull;
@@ -161,8 +227,14 @@ export function ToolCallMessage(props: {
 
   const viewportMode = showExpanded && full ? "scroll" : "clip";
 
+  const showJsonArgs = !!args && !isQuestionTool;
+  const showJsonResult =
+    !isQuestionTool && !!(resultBody && resultBody.length > 0);
   const hasBody =
-    !!args || !!(resultBody && resultBody.length > 0) || !!toggleLink;
+    isQuestionTool ||
+    showJsonArgs ||
+    showJsonResult ||
+    !!toggleLink;
 
   return (
     <div
@@ -178,9 +250,11 @@ export function ToolCallMessage(props: {
           <span className="thinking-left">
             <span className="thinking-chevron" aria-hidden="true" />
             <span className="thinking-label">{displayLabel}</span>
-            <span className="thinking-dur" aria-hidden="true">
-              {durationLabel}
-            </span>
+            {durationLabel.trim() !== "" ? (
+              <span className="thinking-dur" aria-hidden="true">
+                {durationLabel}
+              </span>
+            ) : null}
           </span>
         </summary>
         {hasBody ? (
@@ -188,12 +262,19 @@ export function ToolCallMessage(props: {
             className="thinking-body coddy-tool-call-body"
             aria-label="Tool call details"
           >
-            {args ? (
+            {isQuestionTool ? (
+              <QuestionToolTimelineReadout
+                argsText={props.argsText}
+                resultText={resultBody}
+                status={props.status}
+              />
+            ) : null}
+            {showJsonArgs ? (
               <pre className="tool-block" aria-label="Tool arguments">
                 {args}
               </pre>
             ) : null}
-            {resultBody ? (
+            {showJsonResult ? (
               <div
                 className={[
                   "tool-block tool-result tool-result-raw",

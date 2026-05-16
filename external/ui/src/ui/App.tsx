@@ -16,11 +16,24 @@ import { insertNewThinkingBeforeStreamingAssistant } from "./chat/transcriptThin
 import { openAIStreamErrorMessage } from "./chat/streamError";
 import { parseSSEBlocks } from "./chat/sse";
 import { consumeComposerSseReader } from "./chat/consumeComposerSse";
+import {
+  parseCoddyQuestionPayload,
+  type QuestionResolvedState,
+} from "./chat/questionTypes";
 import { pickStreamMutationBase } from "./chat/streamMutationBase";
 import {
+  dedupeAdjacentDuplicateThinkingCompleted,
   keepLocalTranscriptIfServerEmpty,
   mergeTranscriptPreferLocalSuffix,
 } from "./chat/transcriptServerSnapshot";
+import { reattachLocalQuestionPrompts } from "./chat/transcriptQuestionReattach";
+import {
+  clearQuestionPromptRecords,
+  mergeStoredQuestionPromptsIntoTranscript,
+  patchQuestionToolArgsFromPromptRecords,
+  pickRicherQuestionToolArgs,
+  upsertQuestionPromptRecord,
+} from "./chat/questionPromptSessionStore";
 import { transcriptHasFilledAssistant } from "./chat/streamSyncLocalAssistant";
 import { stableMemoryCopilotItemId } from "./chat/memoryStableId";
 import type { TokenUsage, TranscriptItem } from "./chat/types";
@@ -615,6 +628,74 @@ export function App() {
   const heroAccentVerb = useMemo(
     () => pickHeroAccentVerb(sessionId, heroHomeGeneration),
     [sessionId, heroHomeGeneration],
+  );
+
+  const handleComposerSseQuestion = useCallback(
+    (raw: Record<string, unknown>) => {
+      const p = parseCoddyQuestionPayload(raw);
+      if (!p) return;
+      const key = p.sessionId.trim();
+      if (!key) return;
+      upsertQuestionPromptRecord(key, {
+        requestId: p.requestId.trim(),
+        payload: p,
+      });
+      applyStreamItemsForSession(key, (prev) => {
+        const ridInner = p.requestId;
+        const withoutStalePending = prev.filter(
+          (x) =>
+            !(
+              x.type === "question_prompt" &&
+              !x.resolved
+            ),
+        );
+        const withoutDup = withoutStalePending.filter(
+          (x) =>
+            !(x.type === "question_prompt" && x.payload.requestId === ridInner),
+        );
+        return [
+          ...withoutDup,
+          {
+            id: `qp_${ridInner}`,
+            type: "question_prompt" as const,
+            payload: p,
+          },
+        ];
+      });
+    },
+    [],
+  );
+
+  const resolveQuestionPrompt = useCallback(
+    (
+      sessionId: string,
+      itemId: string,
+      resolved: QuestionResolvedState,
+    ) => {
+      const key = sessionId.trim();
+      if (!key) return;
+      applyStreamItemsForSession(key, (prev) => {
+        const next = prev.map((x) =>
+          x.id === itemId && x.type === "question_prompt"
+            ? { ...x, resolved }
+            : x,
+        );
+        const hit = next.find(
+          (x) => x.id === itemId && x.type === "question_prompt",
+        );
+        if (hit?.type === "question_prompt") {
+          upsertQuestionPromptRecord(key, {
+            requestId: hit.payload.requestId.trim(),
+            payload: hit.payload,
+            ...(hit.resolved !== undefined
+              ? { resolved: hit.resolved }
+              : {}),
+          });
+        }
+        return next;
+      });
+    },
+    [],
   );
 
   const currentTitle = useMemo(() => {
@@ -1353,7 +1434,14 @@ export function App() {
         };
         if (title) merged.title = title;
         if (kind) merged.kind = kind;
-        if (row.argsPreview) merged.argsText = row.argsPreview;
+        if (row.argsPreview) {
+          const titleLower = (title || "").trim().toLowerCase();
+          const pickedArgs =
+            titleLower === "question"
+              ? pickRicherQuestionToolArgs(cur.argsText, row.argsPreview)
+              : row.argsPreview;
+          if (pickedArgs) merged.argsText = pickedArgs;
+        }
         if (row.resultPreview) merged.resultText = row.resultPreview;
         if (row.resultPreviewTruncated === true)
           merged.resultWasTruncated = true;
@@ -1373,8 +1461,11 @@ export function App() {
         : viewingTrim === sid
           ? itemsRef.current
           : undefined;
-    const merged = mergeTranscriptPreferLocalSuffix(next, localForMerge);
-    const applied =
+    const mergedBase = mergeTranscriptPreferLocalSuffix(next, localForMerge);
+    let merged = reattachLocalQuestionPrompts(mergedBase, localForMerge);
+    merged = mergeStoredQuestionPromptsIntoTranscript(merged, sid);
+    merged = patchQuestionToolArgsFromPromptRecords(merged, sid);
+    const appliedRaw =
       keepLocalTranscriptIfServerEmpty({
         serverNext: merged,
         sid,
@@ -1382,6 +1473,7 @@ export function App() {
         prevShadow,
         prevItems: itemsRef.current,
       }) ?? merged;
+    const applied = dedupeAdjacentDuplicateThinkingCompleted(appliedRaw);
     if (opts?.skipSetItems) {
       streamShadowBySidRef.current.set(sid, applied);
       return applied;
@@ -1415,6 +1507,7 @@ export function App() {
       return;
     }
     armSessionDeleteBackdropSuppressUntil(sessionDeleteBackdropSuppressUntilRef);
+    clearQuestionPromptRecords(id);
     await fetch(`/coddy/sessions/${encodeURIComponent(id)}`, {
       method: "DELETE",
       headers,
@@ -1639,6 +1732,7 @@ export function App() {
         newId,
         applyMemoryPhaseToItems,
         applyMemoryChunkToItems,
+        onQuestion: handleComposerSseQuestion,
       });
 
       const syncAssistantFromServer = async () => {
@@ -1958,6 +2052,7 @@ export function App() {
         newId,
         applyMemoryPhaseToItems,
         applyMemoryChunkToItems,
+        onQuestion: handleComposerSseQuestion,
       });
 
       const syncAssistantFromServer = async () => {
@@ -2446,6 +2541,7 @@ export function App() {
           onDraftChange={setDraft}
           generating={generating}
           onStop={() => stopActiveGeneration()}
+          onQuestionPromptResolved={resolveQuestionPrompt}
           onSend={(text: string) => {
             if (
               sessionId.trim() &&

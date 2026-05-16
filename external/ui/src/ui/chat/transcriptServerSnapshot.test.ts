@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  dedupeAdjacentDuplicateThinkingCompleted,
   keepLocalTranscriptIfServerEmpty,
   mergeTranscriptPreferLocalSuffix,
 } from "./transcriptServerSnapshot";
@@ -17,6 +18,62 @@ const a = (id: string, text: string, streaming?: boolean): TranscriptItem => ({
   type: "assistant_message",
   content: text,
   ...(streaming !== undefined ? { streaming } : {}),
+});
+
+const thinking = (
+  id: string,
+  content: string,
+  status: "in_progress" | "completed",
+  durationMs?: number,
+): TranscriptItem => ({
+  id,
+  type: "thinking",
+  status,
+  content,
+  ...(durationMs !== undefined ? { durationMs } : {}),
+});
+
+describe("dedupeAdjacentDuplicateThinkingCompleted", () => {
+  it("collapses consecutive completed rows with same trimmed content", () => {
+    const items = [
+      thinking("a", " reasoning ", "completed", 100),
+      thinking("b", "reasoning", "completed", 2803),
+    ];
+    const out = dedupeAdjacentDuplicateThinkingCompleted(items);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      id: "a",
+      type: "thinking",
+      status: "completed",
+      content: " reasoning ",
+      durationMs: 2803,
+    });
+  });
+
+  it("does not collapse when content differs", () => {
+    const items = [
+      thinking("a", "one", "completed"),
+      thinking("b", "two", "completed"),
+    ];
+    expect(dedupeAdjacentDuplicateThinkingCompleted(items)).toHaveLength(2);
+  });
+
+  it("does not collapse when prior row is in_progress", () => {
+    const items = [
+      thinking("a", "same", "in_progress"),
+      thinking("b", "same", "completed"),
+    ];
+    expect(dedupeAdjacentDuplicateThinkingCompleted(items)).toHaveLength(2);
+  });
+
+  it("does not collapse across a different row type", () => {
+    const items = [
+      thinking("a", "same", "completed"),
+      u("x", "hi"),
+      thinking("b", "same", "completed"),
+    ];
+    expect(dedupeAdjacentDuplicateThinkingCompleted(items)).toHaveLength(3);
+  });
 });
 
 describe("mergeTranscriptPreferLocalSuffix", () => {

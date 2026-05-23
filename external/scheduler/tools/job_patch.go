@@ -24,6 +24,7 @@ func jobPatchTool(cfg *config.Config) *tooling.Tool {
 				"type": "object",
 				"properties": map[string]interface{}{
 					"job_id":      map[string]interface{}{"type": "string"},
+					"new_job_id":  map[string]interface{}{"type": "string", "description": "Rename the job to this id (moves .md and sidecars)."},
 					"description": map[string]interface{}{"type": "string"},
 					"schedule":    map[string]interface{}{"type": "string"},
 					"paused":      map[string]interface{}{"type": "boolean"},
@@ -39,6 +40,7 @@ func jobPatchTool(cfg *config.Config) *tooling.Tool {
 		Execute: func(ctx context.Context, argsJSON string, env *tooling.Env) (string, error) {
 			type patchIn struct {
 				JobID       string          `json:"job_id"`
+				NewJobID    json.RawMessage `json:"new_job_id"`
 				Description json.RawMessage `json:"description"`
 				Schedule    json.RawMessage `json:"schedule"`
 				Paused      *bool           `json:"paused"`
@@ -85,12 +87,26 @@ func jobPatchTool(cfg *config.Config) *tooling.Tool {
 				_ = json.Unmarshal(wrap.Body, &s)
 				p.Body = &s
 			}
+			if wrap.NewJobID != nil {
+				var s string
+				_ = json.Unmarshal(wrap.NewJobID, &s)
+				s = strings.TrimSpace(s)
+				if s != "" {
+					p.JobID = &s
+				}
+			}
 			jobID := strings.TrimSpace(wrap.JobID)
 			op := schedservice.NewService(cfg, nil, toolEnvCWD(env))
 			if err := op.PatchJob(jobID, p); err != nil {
 				return "", err
 			}
-			return fmt.Sprintf(`{"object":"coddy.scheduler_job_patched","job_id":%q}`, jobID), nil
+			outID := jobID
+			if p.JobID != nil {
+				if v := strings.TrimSpace(*p.JobID); v != "" {
+					outID = v
+				}
+			}
+			return fmt.Sprintf(`{"object":"coddy.scheduler_job_patched","job_id":%q}`, outID), nil
 		},
 	}
 }

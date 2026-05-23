@@ -62,6 +62,8 @@ import {
   parseAppHash,
   setHistoryHash,
   setSessionHashInLocation,
+  schedulerEditorFromParsedHash,
+  setSchedulerCreateHash,
   setSchedulerJobHash,
   setSchedulerListHash,
   setSettingsHash,
@@ -900,11 +902,7 @@ export function App() {
       }
       setSchedulerOpen(true);
       setSessionsOpen(!!p.historyOpen && drawersWide);
-      if (p.jobId) {
-        setSchedulerEditor({ mode: "edit", jobId: p.jobId });
-      } else {
-        setSchedulerEditor(null);
-      }
+      setSchedulerEditor(schedulerEditorFromParsedHash(p));
       return;
     }
     viewedSessionIdRef.current = "";
@@ -2554,9 +2552,8 @@ export function App() {
               listError={schedulerListError}
               loading={schedulerListLoading}
               onAddJob={() => {
-                setSchedulerEditor({ mode: "create" });
                 const hp = parseAppHash();
-                setSchedulerListHash({
+                setSchedulerCreateHash({
                   historySidebar:
                     hp.branch === "scheduler" && hp.historyOpen,
                 });

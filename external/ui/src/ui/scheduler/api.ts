@@ -72,7 +72,9 @@ export async function schedulerCreateJob(
 export async function schedulerPatchJob(
   jobId: string,
   patch: SchedulerJobPatch,
-): Promise<ApiResult<{ object?: string; job_id?: string }>> {
+): Promise<
+  ApiResult<{ object?: string; job_id?: string }>
+> {
   const res = await fetch(
     `/coddy/scheduler/jobs/${encodeURIComponent(jobId)}`,
     {

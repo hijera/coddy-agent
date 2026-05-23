@@ -14,7 +14,11 @@ import {
   setSchedulerJobHash,
   setSchedulerListHash,
 } from "./hashRoute";
-import type { SchedulerJob, SchedulerJobCreate } from "./types";
+import type {
+  SchedulerJob,
+  SchedulerJobCreate,
+  SchedulerJobPatch,
+} from "./types";
 import {
   SchedulerIconPause,
   SchedulerIconResume,
@@ -127,6 +131,7 @@ export function SchedulerJobEditorSheet(props: {
 
   const snapshotFromForm = useCallback((f: FormRef) => {
     return JSON.stringify({
+      jobId: f.jobIdField.trim(),
       description: f.description.trim(),
       schedule: f.schedule.trim(),
       body: f.body,
@@ -148,6 +153,14 @@ export function SchedulerJobEditorSheet(props: {
         const jidErr = validateJobId(jid);
         if (jidErr) {
           errs.jobId = jidErr;
+        }
+      } else {
+        const existing = (f.jobId || "").trim();
+        if (jid !== existing) {
+          const jidErr = validateJobId(jid);
+          if (jidErr) {
+            errs.jobId = jidErr;
+          }
         }
       }
       if (!desc) {
@@ -182,10 +195,11 @@ export function SchedulerJobEditorSheet(props: {
     if (snap === lastCommittedRef.current) {
       return;
     }
+    const nextId = f.jobIdField.trim();
     setSaving(true);
     setSaveErr(null);
     try {
-      const res = await schedulerPatchJob(existing, {
+      const patch: SchedulerJobPatch = {
         description: f.description.trim(),
         schedule: f.schedule.trim(),
         body: f.body,
@@ -193,13 +207,38 @@ export function SchedulerJobEditorSheet(props: {
         ...(f.cwd.trim() ? { cwd: f.cwd.trim() } : { cwd: "" }),
         ...(f.model.trim() ? { model: f.model.trim() } : { model: "" }),
         mode: f.modeField,
-      });
+      };
+      if (nextId && nextId !== existing) {
+        patch.job_id = nextId;
+      }
+      const res = await schedulerPatchJob(existing, patch);
       if (!res.ok) {
         setSaveErr(res.message);
         return;
       }
-      lastCommittedRef.current = snap;
-      onSavedRef.current();
+      const outId =
+        (res.ok && res.data && typeof res.data.job_id === "string"
+          ? res.data.job_id.trim()
+          : "") || nextId || existing;
+      lastCommittedRef.current = JSON.stringify({
+        jobId: outId,
+        description: f.description.trim(),
+        schedule: f.schedule.trim(),
+        body: f.body,
+        cwd: f.cwd.trim(),
+        model: f.model.trim(),
+        mode: f.modeField,
+        paused: f.paused,
+      });
+      if (outId !== existing) {
+        const hp = parseAppHash();
+        setSchedulerJobHash(outId, {
+          historySidebar: hp.branch === "scheduler" && hp.historyOpen,
+        });
+        onSavedRef.current(outId);
+      } else {
+        onSavedRef.current();
+      }
     } finally {
       setSaving(false);
     }
@@ -302,6 +341,7 @@ export function SchedulerJobEditorSheet(props: {
       setBody(j.body || "");
       setPaused(!!j.paused);
       lastCommittedRef.current = JSON.stringify({
+        jobId: j.job_id,
         description: (j.description || "").trim(),
         schedule: (j.schedule || "").trim(),
         body: j.body || "",
@@ -339,6 +379,7 @@ export function SchedulerJobEditorSheet(props: {
     props.jobId,
     loading,
     loadErr,
+    jobIdField,
     description,
     schedule,
     body,
@@ -484,7 +525,6 @@ export function SchedulerJobEditorSheet(props: {
                   .filter(Boolean)
                   .join(" ")}
                 value={jobIdField}
-                disabled={props.mode === "edit"}
                 onChange={(ev) => setJobIdField(ev.target.value)}
                 autoComplete="off"
                 spellCheck={false}

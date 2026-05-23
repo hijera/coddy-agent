@@ -25,6 +25,10 @@ test("light theme overrides semantic tokens on data-theme", () => {
   expect(css).toMatch(
     /\[data-theme="light"\]\s*\{[^}]*--coddy-glass-panel-bg:\s*rgba\(255,\s*255,\s*255/,
   );
+  expect(css).toMatch(
+    /\[data-theme="light"\]\s*\{[^}]*--coddy-tip-fg:\s*#18181b/,
+  );
+  expect(css).toMatch(/\.rail-tip\s*\{[^}]*color:\s*var\(--coddy-tip-fg\)/);
 });
 
 test("composer, history, scheduler, settings, slash frosted surface, mode or model menus share panel rule", () => {

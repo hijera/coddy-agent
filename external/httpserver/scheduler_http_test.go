@@ -126,8 +126,46 @@ func TestCoddySchedulerHTTPJobsEnvelopeCRUDPauseRunConflict(t *testing.T) {
 		t.Fatalf("put demo %d", putRes.StatusCode)
 	}
 
+	patchRename := strings.NewReader(`{"job_id":"demo-renamed"}`)
+	reqRename, err := http.NewRequest(http.MethodPatch, ts.URL+"/coddy/scheduler/jobs/demo", patchRename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reqRename.Header.Set("Content-Type", "application/json")
+	renameRes, err := http.DefaultClient.Do(reqRename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bRename, _ := ioReadAllClose(renameRes.Body)
+	if renameRes.StatusCode != http.StatusOK {
+		t.Fatalf("rename demo %d %s", renameRes.StatusCode, bRename)
+	}
+	var renameOut map[string]string
+	if err := json.Unmarshal(bRename, &renameOut); err != nil {
+		t.Fatal(err)
+	}
+	if renameOut["job_id"] != "demo-renamed" {
+		t.Fatalf("rename response job_id=%q", renameOut["job_id"])
+	}
+	rRenamed, err := http.Get(ts.URL + "/coddy/scheduler/jobs/demo-renamed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bRenamed, _ := ioReadAllClose(rRenamed.Body)
+	if rRenamed.StatusCode != http.StatusOK {
+		t.Fatalf("get renamed %d %s", rRenamed.StatusCode, bRenamed)
+	}
+	rOld, err := http.Get(ts.URL + "/coddy/scheduler/jobs/demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = ioReadAllClose(rOld.Body)
+	if rOld.StatusCode != http.StatusNotFound {
+		t.Fatalf("old id after rename status=%d want 404", rOld.StatusCode)
+	}
+
 	patchPaused := strings.NewReader(`{"paused":true}`)
-	reqP, err := http.NewRequest(http.MethodPatch, ts.URL+"/coddy/scheduler/jobs/demo", patchPaused)
+	reqP, err := http.NewRequest(http.MethodPatch, ts.URL+"/coddy/scheduler/jobs/demo-renamed", patchPaused)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +179,7 @@ func TestCoddySchedulerHTTPJobsEnvelopeCRUDPauseRunConflict(t *testing.T) {
 		t.Fatalf("pause %d", rP.StatusCode)
 	}
 
-	runReq, err := http.NewRequest(http.MethodPost, ts.URL+"/coddy/scheduler/jobs/demo/run", nil)
+	runReq, err := http.NewRequest(http.MethodPost, ts.URL+"/coddy/scheduler/jobs/demo-renamed/run", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,11 +192,11 @@ func TestCoddySchedulerHTTPJobsEnvelopeCRUDPauseRunConflict(t *testing.T) {
 		t.Fatalf("run while paused status=%d want 409", runRes.StatusCode)
 	}
 
-	lockPath := filepath.Join(schedRoot, "demo.lock")
+	lockPath := filepath.Join(schedRoot, "demo-renamed.lock")
 	if err := os.WriteFile(lockPath, []byte("x\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	delReq, err := http.NewRequest(http.MethodDelete, ts.URL+"/coddy/scheduler/jobs/demo", nil)
+	delReq, err := http.NewRequest(http.MethodDelete, ts.URL+"/coddy/scheduler/jobs/demo-renamed", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +210,7 @@ func TestCoddySchedulerHTTPJobsEnvelopeCRUDPauseRunConflict(t *testing.T) {
 	}
 	_ = os.Remove(lockPath)
 
-	rmReq, err := http.NewRequest(http.MethodDelete, ts.URL+"/coddy/scheduler/jobs/demo", nil)
+	rmReq, err := http.NewRequest(http.MethodDelete, ts.URL+"/coddy/scheduler/jobs/demo-renamed", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +223,7 @@ func TestCoddySchedulerHTTPJobsEnvelopeCRUDPauseRunConflict(t *testing.T) {
 		t.Fatalf("delete demo %d", rmRes.StatusCode)
 	}
 
-	rRuns404, err := http.Get(ts.URL + "/coddy/scheduler/jobs/demo/runs")
+	rRuns404, err := http.Get(ts.URL + "/coddy/scheduler/jobs/demo-renamed/runs")
 	if err != nil {
 		t.Fatal(err)
 	}

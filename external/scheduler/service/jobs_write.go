@@ -87,12 +87,72 @@ func (o *Service) ReplaceJob(jobID string, in SchedulerJobCreate) error {
 	return os.WriteFile(abs, data, 0o644)
 }
 
+// renameJobFiles moves basename.md plus .state and .lock sidecars when idle.
+func (o *Service) renameJobFiles(oldID, newID string) error {
+	oldID = strings.TrimSpace(oldID)
+	newID = strings.TrimSpace(newID)
+	if oldID == "" || newID == "" || oldID == newID {
+		return nil
+	}
+	if err := ValidateJobID(newID); err != nil {
+		return err
+	}
+	oldAbs, err := o.jobAbsPath(oldID)
+	if err != nil {
+		return err
+	}
+	newAbs, err := o.jobAbsPath(newID)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(oldAbs); err != nil {
+		if os.IsNotExist(err) {
+			return ErrJobNotFound
+		}
+		return err
+	}
+	if _, err := os.Stat(newAbs); err == nil {
+		return ErrJobExists
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if lockOrTracked(oldAbs) {
+		return ErrJobBusy
+	}
+	if err := os.Rename(oldAbs, newAbs); err != nil {
+		return err
+	}
+	for _, pathFn := range []func(string) string{storage.StatePath, storage.LockPath} {
+		oldSide := pathFn(oldAbs)
+		if _, err := os.Stat(oldSide); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return err
+		}
+		if err := os.Rename(oldSide, pathFn(newAbs)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // PatchJob merges fields into an existing job file.
 func (o *Service) PatchJob(jobID string, p SchedulerJobPatch) error {
 	if err := o.requireEnabled(); err != nil {
 		return err
 	}
-	abs, err := o.jobAbsPath(jobID)
+	targetID := strings.TrimSpace(jobID)
+	if p.JobID != nil {
+		newID := strings.TrimSpace(*p.JobID)
+		if newID != "" && newID != targetID {
+			if err := o.renameJobFiles(targetID, newID); err != nil {
+				return err
+			}
+			targetID = newID
+		}
+	}
+	abs, err := o.jobAbsPath(targetID)
 	if err != nil {
 		return err
 	}

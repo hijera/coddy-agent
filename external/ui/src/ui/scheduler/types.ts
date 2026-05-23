@@ -38,6 +38,7 @@ export type SchedulerJobCreate = {
 };
 
 export type SchedulerJobPatch = {
+  job_id?: string;
   description?: string;
   schedule?: string;
   paused?: boolean;

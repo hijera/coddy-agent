@@ -82,7 +82,7 @@ Paths are **missing** from a plain **`http`** build and from OpenAPI when **sche
 | POST | **`/coddy/scheduler/jobs`** | Create job. JSON body **`job_id`**, **`description`**, **`schedule`** (5-field UTC cron), optional **`paused`**, **`cwd`**, **`model`**, **`mode`**, **`body`**. **`201`** + **`Location`**. **`409`** when **`job_id`** already exists. |
 | GET | **`/coddy/scheduler/jobs/{job_id}`** | Full **`SchedulerJob`** including **`body`**. |
 | PUT | **`/coddy/scheduler/jobs/{job_id}`** | Replace entire job file. |
-| PATCH | **`/coddy/scheduler/jobs/{job_id}`** | Merge fields (e.g. **`paused`**, **`schedule`**, **`body`**). |
+| PATCH | **`/coddy/scheduler/jobs/{job_id}`** | Merge fields (e.g. **`paused`**, **`schedule`**, **`body`**). Optional **`job_id`** in the body renames the on-disk job (moves **`.md`**, **`.state`**, **`.lock`** when idle). Response **`job_id`** is the effective id after the patch. **`409`** if the target id exists or the job is busy. |
 | DELETE | **`/coddy/scheduler/jobs/{job_id}`** | Remove **`.md`** and sidecars **`basename.state`**, **`basename.lock`** when idle. **`409`** when locked or a run is tracked. |
 | POST | **`/coddy/scheduler/jobs/{job_id}/pause`** | Sets YAML **`paused: true`**. |
 | POST | **`/coddy/scheduler/jobs/{job_id}/resume`** | Sets **`paused: false`**. |

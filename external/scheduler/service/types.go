@@ -46,7 +46,9 @@ type SchedulerJobCreate struct {
 }
 
 // SchedulerJobPatch is PATCH /coddy/scheduler/jobs/{job_id}.
+// JobID, when set to a value different from the path job_id, renames the job file and sidecars.
 type SchedulerJobPatch struct {
+	JobID       *string `json:"job_id"`
 	Description *string `json:"description"`
 	Schedule    *string `json:"schedule"`
 	Paused      *bool   `json:"paused"`

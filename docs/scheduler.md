@@ -75,7 +75,7 @@ With **`-tags=http,scheduler`**, **`GET /coddy/scheduler/jobs`**, job CRUD, **`p
 
 - **`coddy_scheduler_jobs_list`** - list jobs (**`include_body`** optional)
 - **`coddy_scheduler_job_get`** - one job JSON including **`body`**
-- **`coddy_scheduler_job_create`** / **`coddy_scheduler_job_replace`** / **`coddy_scheduler_job_patch`**
+- **`coddy_scheduler_job_create`** / **`coddy_scheduler_job_replace`** / **`coddy_scheduler_job_patch`** (optional **`new_job_id`** renames the job file)
 - **`coddy_scheduler_job_delete`**
 - **`coddy_scheduler_job_pause`** / **`coddy_scheduler_job_resume`**
 - **`coddy_scheduler_job_run`** - manual run (does not advance cron **`.state`**)

@@ -4,10 +4,13 @@ import {
   appNavHrefHistory,
   appNavHrefScheduler,
   appNavHrefSchedulerJob,
+  appNavHrefSchedulerNew,
   appNavHrefSession,
   appNavHrefSettings,
   parseAppHash,
+  schedulerEditorFromParsedHash,
   setHistoryHash,
+  setSchedulerCreateHash,
   setSchedulerJobHash,
   setSchedulerListHash,
   setSessionHashInLocation,
@@ -30,7 +33,21 @@ describe("parseAppHash", () => {
     expect(parseAppHash()).toEqual({
       branch: "scheduler",
       jobId: null,
+      createOpen: false,
       historyOpen: true,
+    });
+  });
+
+  test("parses scheduler new-job route with history sidebar flag", () => {
+    setHash("#/scheduler/new?history=1");
+    expect(parseAppHash()).toEqual({
+      branch: "scheduler",
+      jobId: null,
+      createOpen: true,
+      historyOpen: true,
+    });
+    expect(schedulerEditorFromParsedHash(parseAppHash())).toEqual({
+      mode: "create",
     });
   });
 
@@ -39,8 +56,14 @@ describe("parseAppHash", () => {
     expect(parseAppHash()).toEqual({
       branch: "scheduler",
       jobId: "demo/one",
+      createOpen: false,
       historyOpen: true,
     });
+  });
+
+  test("scheduler list hash does not open create editor", () => {
+    setHash("#/scheduler");
+    expect(schedulerEditorFromParsedHash(parseAppHash())).toBeNull();
   });
 
   test("parses session with history sidebar flag", () => {
@@ -72,6 +95,12 @@ describe("hash writers", () => {
     setHash("");
     setSchedulerListHash({ historySidebar: true });
     expect(window.location.hash).toBe("#/scheduler?history=1");
+  });
+
+  test("setSchedulerCreateHash can add history=1", () => {
+    setHash("");
+    setSchedulerCreateHash({ historySidebar: true });
+    expect(window.location.hash).toBe("#/scheduler/new?history=1");
   });
 
   test("setSchedulerJobHash can add history=1", () => {
@@ -131,6 +160,7 @@ describe("appNavHref helpers", () => {
     expect(appNavHrefHistory()).toBe("#/history");
     expect(appNavHrefSettings()).toBe("#/settings");
     expect(appNavHrefScheduler()).toBe("#/scheduler");
+    expect(appNavHrefSchedulerNew()).toBe("#/scheduler/new");
   });
 
   test("session path encodes id and falls back to home when empty", () => {

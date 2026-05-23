@@ -1,5 +1,6 @@
 /**
- * Hash routes: `#/s/<sessionId>`, `#/history`, `#/scheduler`, `#/scheduler/jobs/<job_id>`.
+ * Hash routes: `#/s/<sessionId>`, `#/history`, `#/scheduler`, `#/scheduler/new`,
+ * `#/scheduler/jobs/<job_id>`.
  * Optional `?history=1` on scheduler (and session) URLs keeps the History drawer open on wide screens.
  */
 
@@ -7,8 +8,35 @@ export type ParsedAppHash =
   | { branch: "none"; historyOpen: boolean }
   | { branch: "session"; sessionId: string; historyOpen: boolean }
   | { branch: "history" }
-  | { branch: "scheduler"; jobId: string | null; historyOpen: boolean }
+  | {
+      branch: "scheduler";
+      jobId: string | null;
+      createOpen: boolean;
+      historyOpen: boolean;
+    }
   | { branch: "settings"; historyOpen: boolean };
+
+export type SchedulerEditorRoute =
+  | { mode: "create" }
+  | { mode: "edit"; jobId: string }
+  | null;
+
+/** Maps a parsed scheduler hash to editor state (list-only hash yields null). */
+export function schedulerEditorFromParsedHash(
+  p: ParsedAppHash,
+): SchedulerEditorRoute {
+  if (p.branch !== "scheduler") {
+    return null;
+  }
+  if (p.createOpen) {
+    return { mode: "create" };
+  }
+  const jid = (p.jobId || "").trim();
+  if (jid) {
+    return { mode: "edit", jobId: jid };
+  }
+  return null;
+}
 
 function splitHashFragment(): { path: string; search: string } {
   const raw = window.location.hash.replace(/^#\/?/, "").trim();
@@ -56,11 +84,25 @@ export function parseAppHash(): ParsedAppHash {
     return {
       branch: "scheduler",
       jobId: decodeURIComponent(schedJob[1]),
+      createOpen: false,
+      historyOpen,
+    };
+  }
+  if (h === "scheduler/new") {
+    return {
+      branch: "scheduler",
+      jobId: null,
+      createOpen: true,
       historyOpen,
     };
   }
   if (h === "scheduler") {
-    return { branch: "scheduler", jobId: null, historyOpen };
+    return {
+      branch: "scheduler",
+      jobId: null,
+      createOpen: false,
+      historyOpen,
+    };
   }
   const sess = /^s\/([^/]+)$/.exec(h);
   if (sess && sess[1]) {
@@ -121,6 +163,20 @@ export function setSchedulerListHash(opts?: {
   }
 }
 
+export function setSchedulerCreateHash(opts?: {
+  historySidebar?: boolean;
+}): void {
+  const next = withHistoryQuery("#/scheduler/new", !!opts?.historySidebar);
+  if (window.location.hash !== next) {
+    history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}${next}`,
+    );
+    notifyHashAfterReplaceState();
+  }
+}
+
 export function setSettingsHash(opts?: {
   historySidebar?: boolean;
 }): void {
@@ -167,7 +223,9 @@ export function setSchedulerJobHash(
 export function stripHistorySidebarFromHash(): void {
   const p = parseAppHash();
   if (p.branch === "scheduler" && p.historyOpen) {
-    if (p.jobId) {
+    if (p.createOpen) {
+      setSchedulerCreateHash();
+    } else if (p.jobId) {
       setSchedulerJobHash(p.jobId);
     } else {
       setSchedulerListHash();
@@ -198,6 +256,10 @@ export function appNavHrefSettings(): string {
 
 export function appNavHrefScheduler(): string {
   return "#/scheduler";
+}
+
+export function appNavHrefSchedulerNew(): string {
+  return "#/scheduler/new";
 }
 
 /** Hash to open a chat session (middle-click or Ctrl/Cmd-click in a new tab). */

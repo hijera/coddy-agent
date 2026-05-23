@@ -141,8 +141,14 @@ func (s *Server) coddySchedulerJobPatchHTTP(w http.ResponseWriter, r *http.Reque
 		s.coddySchedulerWriteErr(w, err)
 		return
 	}
+	outID := id
+	if p.JobID != nil {
+		if v := strings.TrimSpace(*p.JobID); v != "" {
+			outID = v
+		}
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"object": "coddy.scheduler_job", "job_id": id})
+	_ = json.NewEncoder(w).Encode(map[string]string{"object": "coddy.scheduler_job", "job_id": outID})
 }
 
 func (s *Server) coddySchedulerJobDelete(w http.ResponseWriter, r *http.Request) {
@@ -609,6 +615,10 @@ func openAPISchedulerSchemas() map[string]interface{} {
 		"SchedulerJobPatchDoc": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
+				"job_id": map[string]interface{}{
+					"type":        "string",
+					"description": "New job id (renames the on-disk job file and sidecars when different from the path job_id).",
+				},
 				"description": map[string]string{"type": "string"},
 				"schedule":    map[string]string{"type": "string"},
 				"paused":      map[string]string{"type": "boolean"},

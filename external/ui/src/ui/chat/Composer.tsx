@@ -96,6 +96,7 @@ export function Composer(props: {
 
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const composerFieldWrapRef = useRef<HTMLDivElement | null>(null);
+  const contextHostRef = useRef<HTMLDivElement | null>(null);
   const mirrorInnerRef = useRef<HTMLDivElement | null>(null);
   const [composerScrollTop, setComposerScrollTop] = useState(0);
   /** Bump when the slash draft changes or is dismissed so stale list responses are ignored. */
@@ -187,6 +188,12 @@ export function Composer(props: {
   }, [props.isEmpty, props.sessionId]);
 
   const pickerOpen = slashOpen || atOpen;
+
+  useEffect(() => {
+    if (pickerOpen && contextPopoverOpen) {
+      setContextPopoverOpen(false);
+    }
+  }, [pickerOpen, contextPopoverOpen]);
   const measurePickerFloat = useCallback(() => {
     if (!pickerOpen) {
       setPickerFloatRect(null);
@@ -910,6 +917,9 @@ export function Composer(props: {
         className={[
           "composer-wrap",
           props.isEmpty ? "" : "composer-wrap-docked",
+          contextPopoverOpen && pickerUseSheet
+            ? "composer-wrap-context-sheet"
+            : "",
         ]
           .filter(Boolean)
           .join(" ")}
@@ -1143,6 +1153,7 @@ export function Composer(props: {
             <div className="composer-bar-actions">
               <div
                 className="composer-context-tip-host"
+                ref={contextHostRef}
                 tabIndex={0}
                 aria-label="Context usage"
                 aria-expanded={contextPopoverOpen}
@@ -1178,14 +1189,6 @@ export function Composer(props: {
                     {tip}
                   </span>
                 ) : null}
-                <ContextBreakdownPopover
-                  open={contextPopoverOpen}
-                  onClose={() => setContextPopoverOpen(false)}
-                  contextIdle={contextIdle}
-                  contextPct={pct}
-                  maxContextTokens={maxCtx}
-                  breakdown={props.contextBreakdown}
-                />
               </div>
               <button
                 type="button"
@@ -1218,6 +1221,18 @@ export function Composer(props: {
           </div>
         </div>
       </footer>
+      {contextPopoverOpen ? (
+        <ContextBreakdownPopover
+          open={contextPopoverOpen}
+          onClose={() => setContextPopoverOpen(false)}
+          useSheet={pickerUseSheet}
+          anchorRef={contextHostRef}
+          contextIdle={contextIdle}
+          contextPct={pct}
+          maxContextTokens={maxCtx}
+          breakdown={props.contextBreakdown}
+        />
+      ) : null}
       {pickerOpen
         ? createPortal(
             pickerUseSheet ? (

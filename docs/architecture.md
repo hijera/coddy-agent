@@ -83,7 +83,7 @@ Maintains the state for each conversation session:
 - Optional model override per session (when the user selects a model via ACP)
 - Connected MCP server clients
 - Working directory
-- Active context (skills + cursor rules loaded)
+- Active context (skills + project rules in separate prompt sections)
 - In-memory plan entries for todo tools (**`session.Plan`**), mirrored to **`todos/active.md`** when persistence is enabled (**`filesystem.go`**)
 
 ### ReAct Agent Loop (`internal/agent`)
@@ -91,7 +91,7 @@ Maintains the state for each conversation session:
 The core reasoning engine (**`react.go`**):
 
 1. Loads tool definitions from **`internal/tooling.Registry.AllToolDefinitions`**, applies the session **`ToolSet`** from **`internal/agent/toolsets.go`** (empty set means no filter), then appends MCP tool definitions from connected servers when the mode is **`agent`** or **`plan`**.
-2. Builds the system prompt from **`internal/prompts.Render`**: embedded defaults or files under **`prompts.dir`** named by **`prompts.agent_prompt`** and **`prompts.plan_prompt`** (defaults **`agent.md`** and **`plan.md`**). Template data includes **`CWD`**, tools markdown, skills markdown (that order in stock templates), optional **`TodoList`** and **`Memory`**, plus **`UTCNow`** (RFC3339 UTC refreshed on every render).
+2. Builds the system prompt from **`internal/prompts.Render`**: embedded defaults or files under **`prompts.dir`** named by **`prompts.agent_prompt`** and **`prompts.plan_prompt`** (defaults **`agent.md`** and **`plan.md`**). Template data includes **`CWD`**, tools markdown, skills markdown, rules markdown (**`{{.Rules}}`** via **`internal/rules`**), optional **`TodoList`** and **`Memory`**, plus **`UTCNow`** (RFC3339 UTC refreshed on every render).
 3. Prepends that system message to the session message list and appends the newest user turn.
 4. **Before every LLM invocation** inside one **`session/prompt`**, refreshes the **`system` message content** so **`TodoList`** and other template fields match state after prior tool calls in the same episode.
 5. Streams the LLM response, executes tool calls, appends assistant and tool messages.
@@ -156,7 +156,11 @@ Tools from MCP servers are appended to the LLM tool list in **`agent`** and **`p
 
 ### Skills loader (`internal/skills`)
 
-Loads `SKILL.md` and markdown rules from configured `skills.dirs` (see `docs/skills.md`). Default order is **`${CODDY_HOME}/skills`**, **`${CWD}/.skills`**, **`~/.cursor/skills`**, **`~/.claude/skills`**.
+Loads `SKILL.md` from configured `skills.dirs` (see `docs/skills.md`). Default order is **`${CODDY_HOME}/skills`**, **`${CWD}/.skills`**, **`~/.cursor/skills`**, **`~/.claude/skills`**. Bundled **`/coddy-generate-rules`** is always prepended.
+
+### Rules engine (`internal/rules`)
+
+Discovers `.mdc` / `.md` rules from `.coddy/rules`, `.cursor/rules`, `.claude/rules`, `.codex/rules` under session CWD. Injected into **`{{.Rules}}`** separately from skills; see **`docs/rules.md`**.
 
 Each file is parsed as Markdown and injected into the system prompt when relevant (based on glob patterns in frontmatter).
 

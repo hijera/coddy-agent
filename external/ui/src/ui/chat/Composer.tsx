@@ -94,6 +94,8 @@ export function Composer(props: {
   const idleSendDisabled = props.value.trim() === "";
   const [menuOpen, setMenuOpen] = useState<"mode" | "llm" | null>(null);
   const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
+  /** After closing the breakdown, hide hover tooltip until pointer leaves the ring. */
+  const [contextTipSuppressed, setContextTipSuppressed] = useState(false);
 
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const composerFieldWrapRef = useRef<HTMLDivElement | null>(null);
@@ -256,11 +258,17 @@ export function Composer(props: {
     };
   }, [sheetOverlayOpen, measureSheetBottom]);
 
+  const closeContextPopover = useCallback(() => {
+    setContextPopoverOpen(false);
+    setContextTipSuppressed(true);
+    contextHostRef.current?.blur();
+  }, []);
+
   useEffect(() => {
     if (pickerOpen && contextPopoverOpen) {
-      setContextPopoverOpen(false);
+      closeContextPopover();
     }
-  }, [pickerOpen, contextPopoverOpen]);
+  }, [pickerOpen, contextPopoverOpen, closeContextPopover]);
   const measurePickerFloat = useCallback(() => {
     if (!pickerOpen) {
       setPickerFloatRect(null);
@@ -1087,7 +1095,7 @@ export function Composer(props: {
                 onKeyDown={(ev) => {
                   if (ev.key === "Escape" && contextPopoverOpen) {
                     ev.preventDefault();
-                    setContextPopoverOpen(false);
+                    closeContextPopover();
                     return;
                   }
                   if (ev.key === "Escape" && (slashOpen || atOpen)) {
@@ -1224,17 +1232,33 @@ export function Composer(props: {
 
             <div className="composer-bar-actions">
               <div
-                className="composer-context-tip-host"
+                className={[
+                  "composer-context-tip-host",
+                  contextTipSuppressed ? "composer-context-tip-suppressed" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
                 ref={contextHostRef}
                 tabIndex={0}
                 aria-label="Context usage"
                 aria-expanded={contextPopoverOpen}
                 data-testid="composer-context-ring-host"
-                onClick={() => setContextPopoverOpen((o) => !o)}
+                onMouseLeave={() => setContextTipSuppressed(false)}
+                onClick={() => {
+                  if (contextPopoverOpen) {
+                    closeContextPopover();
+                  } else {
+                    setContextPopoverOpen(true);
+                  }
+                }}
                 onKeyDown={(ev) => {
                   if (ev.key === "Enter" || ev.key === " ") {
                     ev.preventDefault();
-                    setContextPopoverOpen((o) => !o);
+                    if (contextPopoverOpen) {
+                      closeContextPopover();
+                    } else {
+                      setContextPopoverOpen(true);
+                    }
                   }
                 }}
               >
@@ -1256,7 +1280,7 @@ export function Composer(props: {
                     />
                   </svg>
                 </div>
-                {!contextPopoverOpen ? (
+                {!contextPopoverOpen && !contextTipSuppressed ? (
                   <span className="rail-tip composer-context-tip" role="tooltip">
                     {tip}
                   </span>
@@ -1296,7 +1320,7 @@ export function Composer(props: {
       {contextPopoverOpen ? (
         <ContextBreakdownPopover
           open={contextPopoverOpen}
-          onClose={() => setContextPopoverOpen(false)}
+          onClose={closeContextPopover}
           useSheet={pickerUseSheet}
           composerDocked={!props.isEmpty}
           sheetBottomPx={pickerUseSheet ? sheetBottomPx : null}

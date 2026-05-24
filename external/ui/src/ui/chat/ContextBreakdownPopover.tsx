@@ -187,7 +187,7 @@ export function ContextBreakdownPopover(props: {
         </div>
       )}
       <div className="context-breakdown-summary">
-        <span>{idle ? "0.0" : fillPct.toFixed(1)}% Full</span>
+        <span>{idle ? "0.0" : fillPct.toFixed(1)}% Used</span>
         <span className="context-breakdown-summary-sep">·</span>
         <span>
           ~{fmtInt(used)} / {fmtInt(maxCtx)} Tokens

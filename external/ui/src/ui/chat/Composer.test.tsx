@@ -298,6 +298,44 @@ test("context tooltip percent and Max context follow cap when model max changes"
   expect(tip()).toMatch(/Max context 10000/);
 });
 
+test("context tooltip hidden until pointer leaves ring after closing breakdown", () => {
+  const breakdown = {
+    systemPrompt: 100,
+    toolDefinitions: 200,
+    rules: 0,
+    skills: 0,
+    mcp: 0,
+    subagents: 0,
+    conversation: 100,
+    estimatedTotal: 400,
+  };
+  render(
+    <Composer
+      value=""
+      isEmpty={false}
+      mode="agent"
+      modes={["agent", "plan"]}
+      contextPct={5}
+      maxContextTokens={10000}
+      contextBreakdown={breakdown}
+      onModeChange={() => {}}
+      onChange={() => {}}
+      onSend={() => {}}
+    />,
+  );
+  const host = screen.getByTestId("composer-context-ring-host");
+  fireEvent.mouseEnter(host);
+  expect(screen.getByRole("tooltip")).toBeTruthy();
+  fireEvent.click(host);
+  expect(screen.queryByRole("tooltip")).toBeNull();
+  fireEvent.mouseDown(document.body);
+  expect(screen.queryByTestId("context-breakdown-popover")).toBeNull();
+  expect(screen.queryByRole("tooltip")).toBeNull();
+  fireEvent.mouseLeave(host);
+  fireEvent.mouseEnter(host);
+  expect(screen.getByRole("tooltip")).toBeTruthy();
+});
+
 test("click context ring opens breakdown popover; Escape closes", () => {
   const breakdown = {
     systemPrompt: 100,
@@ -359,7 +397,7 @@ test("context popover percent follows breakdown not cumulative tokenUsage pct", 
     />,
   );
   fireEvent.click(screen.getByTestId("composer-context-ring-host"));
-  expect(screen.getByText(/18\.6% Full/)).toBeTruthy();
+  expect(screen.getByText(/18\.6% used/)).toBeTruthy();
   const fg = document.querySelector(".context-ring-fg") as SVGCircleElement | null;
   expect(fg).toBeTruthy();
   const c = 2 * Math.PI * 12;

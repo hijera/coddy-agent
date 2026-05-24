@@ -2546,6 +2546,19 @@ textarea#composer {
   padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
 }
 
+.context-breakdown-menu--sheet.context-breakdown-menu--above-composer .context-breakdown-menu-scroll {
+  min-height: 0;
+  max-height: min(36vh, calc(100dvh - var(--context-sheet-bottom, 120px) - 16px));
+}
+
+.slash-menu--sheet.slash-menu--above-composer {
+  max-height: min(42vh, calc(100dvh - var(--context-sheet-bottom, 120px) - 16px));
+}
+
+.slash-menu--sheet.slash-menu--above-composer .slash-menu-scroll {
+  max-height: min(40vh, calc(100dvh - var(--context-sheet-bottom, 120px) - 24px));
+}
+
 .context-breakdown-menu--sheet .context-breakdown-summary {
   font-size: 13px;
 }
@@ -2595,8 +2608,31 @@ textarea#composer {
 }
 
 .context-breakdown-empty {
-  margin: 0;
+  margin: 0 0 10px;
   color: color-mix(in srgb, var(--text) 60%, transparent);
+}
+
+.context-meter-track {
+  display: block;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  margin-bottom: 12px;
+}
+
+.context-meter-fill {
+  display: flex;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 999px 0 0 999px;
+  overflow: hidden;
+}
+
+.context-meter-seg {
+  min-width: 1px;
+  height: 100%;
 }
 
 .context-breakdown-bar {

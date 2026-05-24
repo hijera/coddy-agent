@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
 export type ContextBreakdown = {
@@ -42,8 +42,12 @@ export type ContextPopoverFloatRect = {
 export function ContextBreakdownPopover(props: {
   open: boolean;
   onClose: () => void;
-  /** Stacked-shell viewports: bottom sheet + scrim (same as slash / @ pickers). */
+  /** Stacked-shell viewports use a bottom sheet above the composer. */
   useSheet?: boolean;
+  /** When set (px from viewport bottom), sheet sits above docked composer instead of screen bottom. */
+  sheetBottomPx?: number | null;
+  /** Docked chat composer (not hero home). */
+  composerDocked?: boolean;
   /** Anchor for desktop floating position (context ring host). */
   anchorRef?: RefObject<HTMLElement | null>;
   contextIdle?: boolean;
@@ -160,7 +164,13 @@ export function ContextBreakdownPopover(props: {
   const used = b?.estimatedTotal && b.estimatedTotal > 0 ? b.estimatedTotal : totalFromParts;
   const showEmptyState = idle || used === 0;
   const displayRows = showEmptyState ? legendRows : rows;
-  const barTotal = Math.max(used, 1);
+  const fillPct =
+    maxCtx > 0 ? Math.min(100, Math.max(0, (used / maxCtx) * 100)) : 0;
+  const usedRows = displayRows.filter((r) => r.tokens > 0);
+  const sheetBottom =
+    useSheet && typeof props.sheetBottomPx === "number"
+      ? props.sheetBottomPx
+      : 0;
 
   const body = (
     <>
@@ -191,24 +201,31 @@ export function ContextBreakdownPopover(props: {
         <p className="context-breakdown-empty">No context usage yet</p>
       ) : null}
       <div
-        className="context-breakdown-bar"
+        className="context-meter-track"
         role="img"
-        aria-label="Context breakdown bar"
+        aria-label={`Context ${fillPct.toFixed(1)} percent used`}
         data-testid="context-breakdown-bar"
       >
-        {displayRows.map((r) => (
-          <span
-            key={r.key}
-            className="context-breakdown-seg"
-            data-segment={r.key}
-            style={{
-              flexGrow: Math.max(r.tokens, 1),
-              background: `var(${r.cssVar})`,
-              opacity: r.tokens > 0 ? 1 : 0.22,
-            }}
-            title={`${r.label}: ${fmtInt(r.tokens)}`}
-          />
-        ))}
+        <div
+          className="context-meter-fill"
+          style={{ width: `${fillPct}%` }}
+          data-testid="context-meter-fill"
+        >
+          {usedRows.length > 0
+            ? usedRows.map((r) => (
+                <span
+                  key={r.key}
+                  className="context-meter-seg"
+                  data-segment={r.key}
+                  style={{
+                    flexGrow: r.tokens,
+                    background: `var(${r.cssVar})`,
+                  }}
+                  title={`${r.label}: ${fmtInt(r.tokens)}`}
+                />
+              ))
+            : null}
+        </div>
       </div>
       <ul className="context-breakdown-legend">
         {displayRows.map((r) => (
@@ -222,11 +239,23 @@ export function ContextBreakdownPopover(props: {
           </li>
         ))}
       </ul>
-      <span className="sr-only">
-        Bar segments sum to {fmtInt(barTotal)} estimated tokens
-      </span>
     </>
   );
+
+  const menuStyle: CSSProperties | undefined = useSheet
+    ? {
+        bottom: sheetBottom,
+        ...(props.composerDocked && sheetBottom > 0
+          ? { ["--context-sheet-bottom" as string]: `${sheetBottom}px` }
+          : {}),
+      }
+    : floatRect
+      ? {
+          left: floatRect.left,
+          width: floatRect.width,
+          bottom: floatRect.bottom,
+        }
+      : undefined;
 
   const menu = (
     <div
@@ -234,19 +263,14 @@ export function ContextBreakdownPopover(props: {
       className={[
         "context-breakdown-menu",
         useSheet ? "context-breakdown-menu--sheet" : "context-breakdown-menu--portal",
-      ].join(" ")}
+        useSheet && props.composerDocked ? "context-breakdown-menu--above-composer" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       role="dialog"
       aria-label="Context"
       data-testid="context-breakdown-popover"
-      style={
-        !useSheet && floatRect
-          ? {
-              left: floatRect.left,
-              width: floatRect.width,
-              bottom: floatRect.bottom,
-            }
-          : undefined
-      }
+      style={menuStyle}
     >
       <div className="slash-menu-surface" aria-hidden />
       <div className="context-breakdown-menu-scroll">{body}</div>

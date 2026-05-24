@@ -331,3 +331,34 @@ test("click context ring opens breakdown popover; Escape closes", () => {
   fireEvent.keyDown(document, { key: "Escape" });
   expect(screen.queryByTestId("context-breakdown-popover")).toBeNull();
 });
+
+test("context meter fill width reflects usage percent", () => {
+  const breakdown = {
+    systemPrompt: 500,
+    toolDefinitions: 1000,
+    rules: 0,
+    skills: 100,
+    mcp: 0,
+    subagents: 0,
+    conversation: 400,
+    estimatedTotal: 2000,
+  };
+  render(
+    <Composer
+      value=""
+      isEmpty={false}
+      mode="agent"
+      modes={["agent", "plan"]}
+      tokenUsage={{ inputTokens: 800, outputTokens: 200, totalTokens: 1000 }}
+      contextPct={10.0}
+      maxContextTokens={20000}
+      contextBreakdown={breakdown}
+      onModeChange={() => {}}
+      onChange={() => {}}
+      onSend={() => {}}
+    />,
+  );
+  fireEvent.click(screen.getByTestId("composer-context-ring-host"));
+  const fill = screen.getByTestId("context-meter-fill");
+  expect(fill.style.width).toBe("10%");
+});

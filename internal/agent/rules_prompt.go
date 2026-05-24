@@ -30,20 +30,31 @@ func buildRulesPromptMarkdown(st rulesState, contextFiles []string, userText str
 }
 
 // computeContextBreakdown estimates category sizes for the context UI.
+// fullSystem is the rendered system message; tools/skills/rules are subtracted for SystemPrompt.
 func computeContextBreakdown(
+	fullSystem string,
 	skillsMD, toolsMD, rulesMD string,
 	messages []llm.Message,
 	toolDefs []llm.ToolDefinition,
 ) *session.ContextBreakdown {
-	conv := conversationText(messages)
+	toolsTok := session.EstimateTokens(toolsMD)
+	rulesTok := session.EstimateTokens(rulesMD)
+	skillsTok := session.EstimateTokens(skillsMD)
+	mcpTok := estimateMCPTokens(toolDefs)
+	convTok := session.EstimateTokens(conversationText(messages))
+	fullTok := session.EstimateTokens(fullSystem)
+	sysTok := fullTok - toolsTok - rulesTok - skillsTok
+	if sysTok < 0 {
+		sysTok = 0
+	}
 	b := &session.ContextBreakdown{
-		SystemPrompt:    0,
-		ToolDefinitions: session.EstimateTokens(toolsMD),
-		Rules:           session.EstimateTokens(rulesMD),
-		Skills:          session.EstimateTokens(skillsMD),
-		MCP:             estimateMCPTokens(toolDefs),
+		SystemPrompt:    sysTok,
+		ToolDefinitions: toolsTok,
+		Rules:           rulesTok,
+		Skills:          skillsTok,
+		MCP:             mcpTok,
 		Subagents:       0,
-		Conversation:    session.EstimateTokens(conv),
+		Conversation:    convTok,
 	}
 	b.Sum()
 	return b

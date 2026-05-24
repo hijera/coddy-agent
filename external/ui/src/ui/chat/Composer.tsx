@@ -96,6 +96,7 @@ export function Composer(props: {
 
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const composerFieldWrapRef = useRef<HTMLDivElement | null>(null);
+  const composerCardRef = useRef<HTMLDivElement | null>(null);
   const contextHostRef = useRef<HTMLDivElement | null>(null);
   const mirrorInnerRef = useRef<HTMLDivElement | null>(null);
   const [composerScrollTop, setComposerScrollTop] = useState(0);
@@ -150,6 +151,7 @@ export function Composer(props: {
     }
     return window.matchMedia(shellStackMaxWidthMediaQuery).matches;
   });
+  const [sheetBottomPx, setSheetBottomPx] = useState<number | null>(null);
 
   const focusEpoch = props.focusEpoch ?? 0;
   /** Tracks session id for docked composer so switching chats in History refocuses input. */
@@ -188,6 +190,70 @@ export function Composer(props: {
   }, [props.isEmpty, props.sessionId]);
 
   const pickerOpen = slashOpen || atOpen;
+  const sheetOverlayOpen = pickerOpen || contextPopoverOpen;
+
+  const measureSheetBottom = useCallback(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const useSheet = window.matchMedia(shellStackMaxWidthMediaQuery).matches;
+    if (!useSheet) {
+      setSheetBottomPx(null);
+      return;
+    }
+    if (props.isEmpty) {
+      setSheetBottomPx(0);
+      return;
+    }
+    const el =
+      composerCardRef.current ??
+      document.querySelector<HTMLElement>(".composer-wrap-docked .composer-card");
+    if (!el) {
+      setSheetBottomPx(null);
+      return;
+    }
+    const r = el.getBoundingClientRect();
+    setSheetBottomPx(Math.max(0, Math.round(window.innerHeight - r.top + 8)));
+  }, [props.isEmpty]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const mq = window.matchMedia(shellStackMaxWidthMediaQuery);
+    const sync = () => setPickerUseSheet(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!sheetOverlayOpen) {
+      setSheetBottomPx(null);
+      return;
+    }
+    if (typeof window !== "undefined") {
+      setPickerUseSheet(window.matchMedia(shellStackMaxWidthMediaQuery).matches);
+    }
+    measureSheetBottom();
+    window.addEventListener("resize", measureSheetBottom);
+    window.addEventListener("scroll", measureSheetBottom, { passive: true });
+    const card =
+      composerCardRef.current ??
+      document.querySelector<HTMLElement>(".composer-wrap-docked .composer-card");
+    const ro =
+      typeof ResizeObserver !== "undefined" && card
+        ? new ResizeObserver(() => measureSheetBottom())
+        : null;
+    if (card) {
+      ro?.observe(card);
+    }
+    return () => {
+      window.removeEventListener("resize", measureSheetBottom);
+      window.removeEventListener("scroll", measureSheetBottom);
+      ro?.disconnect();
+    };
+  }, [sheetOverlayOpen, measureSheetBottom]);
 
   useEffect(() => {
     if (pickerOpen && contextPopoverOpen) {
@@ -927,7 +993,7 @@ export function Composer(props: {
         <label className="sr-only" htmlFor="composer">
           Message
         </label>
-        <div className="composer-card">
+        <div className="composer-card" ref={composerCardRef}>
           <div className="composer-field-wrap" ref={composerFieldWrapRef}>
             <div className="composer-stack">
               {maskComposerText ? (
@@ -1226,6 +1292,8 @@ export function Composer(props: {
           open={contextPopoverOpen}
           onClose={() => setContextPopoverOpen(false)}
           useSheet={pickerUseSheet}
+          composerDocked={!props.isEmpty}
+          sheetBottomPx={pickerUseSheet ? sheetBottomPx : null}
           anchorRef={contextHostRef}
           contextIdle={contextIdle}
           contextPct={pct}
@@ -1248,12 +1316,25 @@ export function Composer(props: {
                   }}
                 />
                 <div
-                  className="slash-menu slash-menu--sheet"
+                  className={[
+                    "slash-menu slash-menu--sheet",
+                    !props.isEmpty ? "slash-menu--above-composer" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   data-testid={
                     atOpen ? "workspace-files-menu" : "slash-command-menu"
                   }
                   role="listbox"
                   aria-label={atOpen ? "Workspace files" : "Slash commands"}
+                  style={
+                    !props.isEmpty && sheetBottomPx != null
+                      ? {
+                          bottom: sheetBottomPx,
+                          ["--context-sheet-bottom" as string]: `${sheetBottomPx}px`,
+                        }
+                      : undefined
+                  }
                 >
                   {atOpen ? atMenuChrome : slashMenuChrome}
                 </div>

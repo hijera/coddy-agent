@@ -80,10 +80,7 @@ func (a *Agent) buildSystemPrompt(mode string, activeSkills []*skills.Skill, too
 	if rs, ok := a.state.(rulesState); ok {
 		rulesMD = buildRulesPromptMarkdown(rs, contextFiles, userText)
 	}
-	if rs, ok := a.state.(rulesState); ok {
-		rs.SetLastContextBreakdown(computeContextBreakdown(skillsMD, toolsMD, rulesMD, a.state.GetMessages(), toolDefs))
-	}
-	return prompts.RenderWithFallback(mode, promptsDir, a.cfg.Prompts.AgentFile(), a.cfg.Prompts.PlanFile(), prompts.TemplateData{
+	full := prompts.RenderWithFallback(mode, promptsDir, a.cfg.Prompts.AgentFile(), a.cfg.Prompts.PlanFile(), prompts.TemplateData{
 		CWD:            a.state.GetCWD(),
 		Skills:         skillsMD,
 		Rules:          rulesMD,
@@ -94,6 +91,10 @@ func (a *Agent) buildSystemPrompt(mode string, activeSkills []*skills.Skill, too
 		DiscardedPlans: discardedPlans,
 		UTCNow:         time.Now().UTC().Format(time.RFC3339),
 	})
+	if rs, ok := a.state.(rulesState); ok {
+		rs.SetLastContextBreakdown(computeContextBreakdown(full, skillsMD, toolsMD, rulesMD, a.state.GetMessages(), toolDefs))
+	}
+	return full
 }
 
 func discardedPlansPromptBlock(slugs []string) string {

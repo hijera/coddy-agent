@@ -297,3 +297,141 @@ test("context tooltip percent and Max context follow cap when model max changes"
   expect(tip()).toMatch(/10\.0% context used/);
   expect(tip()).toMatch(/Max context 10000/);
 });
+
+test("context tooltip hidden until pointer leaves ring after closing breakdown", () => {
+  const breakdown = {
+    systemPrompt: 100,
+    toolDefinitions: 200,
+    rules: 0,
+    skills: 0,
+    mcp: 0,
+    subagents: 0,
+    conversation: 100,
+    estimatedTotal: 400,
+  };
+  render(
+    <Composer
+      value=""
+      isEmpty={false}
+      mode="agent"
+      modes={["agent", "plan"]}
+      contextPct={5}
+      maxContextTokens={10000}
+      contextBreakdown={breakdown}
+      onModeChange={() => {}}
+      onChange={() => {}}
+      onSend={() => {}}
+    />,
+  );
+  const host = screen.getByTestId("composer-context-ring-host");
+  fireEvent.mouseEnter(host);
+  expect(screen.getByRole("tooltip")).toBeTruthy();
+  fireEvent.click(host);
+  expect(screen.queryByRole("tooltip")).toBeNull();
+  fireEvent.mouseDown(document.body);
+  expect(screen.queryByTestId("context-breakdown-popover")).toBeNull();
+  expect(screen.queryByRole("tooltip")).toBeNull();
+  fireEvent.mouseLeave(host);
+  fireEvent.mouseEnter(host);
+  expect(screen.getByRole("tooltip")).toBeTruthy();
+});
+
+test("click context ring opens breakdown popover; Escape closes", () => {
+  const breakdown = {
+    systemPrompt: 100,
+    toolDefinitions: 200,
+    rules: 300,
+    skills: 150,
+    mcp: 50,
+    subagents: 0,
+    conversation: 1200,
+    estimatedTotal: 2000,
+  };
+  render(
+    <Composer
+      value=""
+      isEmpty={false}
+      mode="agent"
+      modes={["agent", "plan"]}
+      tokenUsage={{ inputTokens: 800, outputTokens: 200, totalTokens: 1000 }}
+      contextPct={10.0}
+      maxContextTokens={10000}
+      contextBreakdown={breakdown}
+      onModeChange={() => {}}
+      onChange={() => {}}
+      onSend={() => {}}
+    />,
+  );
+  expect(screen.queryByTestId("context-breakdown-popover")).toBeNull();
+  fireEvent.click(screen.getByTestId("composer-context-ring-host"));
+  expect(screen.getByTestId("context-breakdown-popover")).toBeTruthy();
+  expect(screen.getByTestId("context-breakdown-row-rules")).toBeTruthy();
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(screen.queryByTestId("context-breakdown-popover")).toBeNull();
+});
+
+test("context popover percent follows breakdown not cumulative tokenUsage pct", () => {
+  const breakdown = {
+    systemPrompt: 851,
+    toolDefinitions: 1950,
+    rules: 14867,
+    skills: 45,
+    mcp: 0,
+    subagents: 0,
+    conversation: 6074,
+    estimatedTotal: 23787,
+  };
+  render(
+    <Composer
+      value=""
+      isEmpty={false}
+      mode="agent"
+      modes={["agent", "plan"]}
+      tokenUsage={{ inputTokens: 800000, outputTokens: 20000, totalTokens: 820000 }}
+      contextPct={100}
+      maxContextTokens={128000}
+      contextBreakdown={breakdown}
+      onModeChange={() => {}}
+      onChange={() => {}}
+      onSend={() => {}}
+    />,
+  );
+  fireEvent.click(screen.getByTestId("composer-context-ring-host"));
+  expect(screen.getByText(/18\.6% used/)).toBeTruthy();
+  const fg = document.querySelector(".context-ring-fg") as SVGCircleElement | null;
+  expect(fg).toBeTruthy();
+  const c = 2 * Math.PI * 12;
+  const off = Number.parseFloat(fg!.getAttribute("stroke-dashoffset") || "0");
+  expect(off).toBeCloseTo(c * (1 - 23787 / 128000), 1);
+});
+
+test("context meter fill width reflects usage percent", () => {
+  const breakdown = {
+    systemPrompt: 500,
+    toolDefinitions: 1000,
+    rules: 0,
+    skills: 100,
+    mcp: 0,
+    subagents: 0,
+    conversation: 400,
+    estimatedTotal: 2000,
+  };
+  render(
+    <Composer
+      value=""
+      isEmpty={false}
+      mode="agent"
+      modes={["agent", "plan"]}
+      tokenUsage={{ inputTokens: 800, outputTokens: 200, totalTokens: 1000 }}
+      contextPct={10.0}
+      maxContextTokens={20000}
+      contextBreakdown={breakdown}
+      onModeChange={() => {}}
+      onChange={() => {}}
+      onSend={() => {}}
+    />,
+  );
+  fireEvent.click(screen.getByTestId("composer-context-ring-host"));
+  const fill = screen.getByTestId("context-meter-fill");
+  expect(fill.style.width).toBe("10%");
+});

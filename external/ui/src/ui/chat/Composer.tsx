@@ -9,6 +9,10 @@ import {
 import { createPortal } from "react-dom";
 import type { TokenUsage } from "./types";
 import {
+  ContextBreakdownPopover,
+  type ContextBreakdown,
+} from "./ContextBreakdownPopover";
+import {
   draftExtendsFailedAtPrefix,
   atMenuDraftAtCaret,
 } from "../skills/draftAt";
@@ -25,6 +29,7 @@ import {
   WORKSPACE_AT_RECENTS_NO_SESSION_KEY,
 } from "../skills/workspaceAtRecents";
 import { shellStackMaxWidthMediaQuery } from "../shellBreakpoint";
+import { contextUsagePercent } from "./contextUsage";
 
 function clamp01(x: number): number {
   if (!Number.isFinite(x)) return 0;
@@ -79,6 +84,7 @@ export function Composer(props: {
   tokenUsage?: TokenUsage | null;
   contextPct?: number;
   maxContextTokens?: number;
+  contextBreakdown?: ContextBreakdown | null;
   onModeChange: (mode: string) => void;
   onChange: (v: string) => void;
   onSend: (text: string) => void;
@@ -87,9 +93,14 @@ export function Composer(props: {
 }) {
   const idleSendDisabled = props.value.trim() === "";
   const [menuOpen, setMenuOpen] = useState<"mode" | "llm" | null>(null);
+  const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
+  /** After closing the breakdown, hide hover tooltip until pointer leaves the ring. */
+  const [contextTipSuppressed, setContextTipSuppressed] = useState(false);
 
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const composerFieldWrapRef = useRef<HTMLDivElement | null>(null);
+  const composerCardRef = useRef<HTMLDivElement | null>(null);
+  const contextHostRef = useRef<HTMLDivElement | null>(null);
   const mirrorInnerRef = useRef<HTMLDivElement | null>(null);
   const [composerScrollTop, setComposerScrollTop] = useState(0);
   /** Bump when the slash draft changes or is dismissed so stale list responses are ignored. */
@@ -143,6 +154,7 @@ export function Composer(props: {
     }
     return window.matchMedia(shellStackMaxWidthMediaQuery).matches;
   });
+  const [sheetBottomPx, setSheetBottomPx] = useState<number | null>(null);
 
   const focusEpoch = props.focusEpoch ?? 0;
   /** Tracks session id for docked composer so switching chats in History refocuses input. */
@@ -181,6 +193,82 @@ export function Composer(props: {
   }, [props.isEmpty, props.sessionId]);
 
   const pickerOpen = slashOpen || atOpen;
+  const sheetOverlayOpen = pickerOpen || contextPopoverOpen;
+
+  const measureSheetBottom = useCallback(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const useSheet = window.matchMedia(shellStackMaxWidthMediaQuery).matches;
+    if (!useSheet) {
+      setSheetBottomPx(null);
+      return;
+    }
+    if (props.isEmpty) {
+      setSheetBottomPx(0);
+      return;
+    }
+    const el =
+      composerCardRef.current ??
+      document.querySelector<HTMLElement>(".composer-wrap-docked .composer-card");
+    if (!el) {
+      setSheetBottomPx(null);
+      return;
+    }
+    const r = el.getBoundingClientRect();
+    setSheetBottomPx(Math.max(0, Math.round(window.innerHeight - r.top + 8)));
+  }, [props.isEmpty]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const mq = window.matchMedia(shellStackMaxWidthMediaQuery);
+    const sync = () => setPickerUseSheet(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!sheetOverlayOpen) {
+      setSheetBottomPx(null);
+      return;
+    }
+    if (typeof window !== "undefined") {
+      setPickerUseSheet(window.matchMedia(shellStackMaxWidthMediaQuery).matches);
+    }
+    measureSheetBottom();
+    window.addEventListener("resize", measureSheetBottom);
+    window.addEventListener("scroll", measureSheetBottom, { passive: true });
+    const card =
+      composerCardRef.current ??
+      document.querySelector<HTMLElement>(".composer-wrap-docked .composer-card");
+    const ro =
+      typeof ResizeObserver !== "undefined" && card
+        ? new ResizeObserver(() => measureSheetBottom())
+        : null;
+    if (card) {
+      ro?.observe(card);
+    }
+    return () => {
+      window.removeEventListener("resize", measureSheetBottom);
+      window.removeEventListener("scroll", measureSheetBottom);
+      ro?.disconnect();
+    };
+  }, [sheetOverlayOpen, measureSheetBottom]);
+
+  const closeContextPopover = useCallback(() => {
+    setContextPopoverOpen(false);
+    setContextTipSuppressed(true);
+    contextHostRef.current?.blur();
+  }, []);
+
+  useEffect(() => {
+    if (pickerOpen && contextPopoverOpen) {
+      closeContextPopover();
+    }
+  }, [pickerOpen, contextPopoverOpen, closeContextPopover]);
   const measurePickerFloat = useCallback(() => {
     if (!pickerOpen) {
       setPickerFloatRect(null);
@@ -764,7 +852,16 @@ export function Composer(props: {
   const modeLabel = displayMode(props.mode || "agent");
   const llmLabel = llmVal ? displayLlmId(llmVal) : "Model";
   const contextIdle = props.contextIdle === true;
-  const pctRaw = typeof props.contextPct === "number" ? props.contextPct : null;
+  const maxCtx =
+    typeof props.maxContextTokens === "number" && props.maxContextTokens > 0
+      ? props.maxContextTokens
+      : 128000;
+  const pctRaw =
+    props.contextBreakdown != null
+      ? contextUsagePercent(maxCtx, props.contextBreakdown)
+      : typeof props.contextPct === "number"
+        ? props.contextPct
+        : null;
   const pct = contextIdle ? null : pctRaw;
   const pct01 = contextIdle
     ? 0
@@ -775,17 +872,13 @@ export function Composer(props: {
   const c = 2 * Math.PI * r;
   const off = c * (1 - pct01);
   const usage = contextIdle ? null : props.tokenUsage || null;
-  const maxCtx =
-    typeof props.maxContextTokens === "number" && props.maxContextTokens > 0
-      ? props.maxContextTokens
-      : 128000;
   const modeMenuDirClass = props.isEmpty ? "opens-down" : "opens-up";
   const tip = contextIdle
     ? ["No context usage yet", `Max context ${fmtInt(maxCtx)}`].join("\n")
     : [
         `${typeof pct === "number" ? pct.toFixed(1) : "0.0"}% context used`,
         usage
-          ? `Input ${fmtInt(usage.inputTokens)}   Output ${fmtInt(usage.outputTokens)}   Total ${fmtInt(usage.totalTokens)}`
+          ? `Input ${fmtInt(usage.inputTokens)}\nOutput ${fmtInt(usage.outputTokens)}\nTotal ${fmtInt(usage.totalTokens)}`
           : "",
         `Max context ${fmtInt(maxCtx)}`,
       ]
@@ -904,6 +997,9 @@ export function Composer(props: {
         className={[
           "composer-wrap",
           props.isEmpty ? "" : "composer-wrap-docked",
+          contextPopoverOpen && pickerUseSheet
+            ? "composer-wrap-context-sheet"
+            : "",
         ]
           .filter(Boolean)
           .join(" ")}
@@ -911,7 +1007,7 @@ export function Composer(props: {
         <label className="sr-only" htmlFor="composer">
           Message
         </label>
-        <div className="composer-card">
+        <div className="composer-card" ref={composerCardRef}>
           <div className="composer-field-wrap" ref={composerFieldWrapRef}>
             <div className="composer-stack">
               {maskComposerText ? (
@@ -997,6 +1093,11 @@ export function Composer(props: {
                   }
                 }}
                 onKeyDown={(ev) => {
+                  if (ev.key === "Escape" && contextPopoverOpen) {
+                    ev.preventDefault();
+                    closeContextPopover();
+                    return;
+                  }
                   if (ev.key === "Escape" && (slashOpen || atOpen)) {
                     ev.preventDefault();
                     dismissSlashAtPickers();
@@ -1131,9 +1232,35 @@ export function Composer(props: {
 
             <div className="composer-bar-actions">
               <div
-                className="composer-context-tip-host"
+                className={[
+                  "composer-context-tip-host",
+                  contextTipSuppressed ? "composer-context-tip-suppressed" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                ref={contextHostRef}
                 tabIndex={0}
                 aria-label="Context usage"
+                aria-expanded={contextPopoverOpen}
+                data-testid="composer-context-ring-host"
+                onMouseLeave={() => setContextTipSuppressed(false)}
+                onClick={() => {
+                  if (contextPopoverOpen) {
+                    closeContextPopover();
+                  } else {
+                    setContextPopoverOpen(true);
+                  }
+                }}
+                onKeyDown={(ev) => {
+                  if (ev.key === "Enter" || ev.key === " ") {
+                    ev.preventDefault();
+                    if (contextPopoverOpen) {
+                      closeContextPopover();
+                    } else {
+                      setContextPopoverOpen(true);
+                    }
+                  }
+                }}
               >
                 <div className="context-ring" role="img" aria-hidden="true">
                   <svg
@@ -1153,9 +1280,11 @@ export function Composer(props: {
                     />
                   </svg>
                 </div>
-                <span className="rail-tip composer-context-tip" role="tooltip">
-                  {tip}
-                </span>
+                {!contextPopoverOpen && !contextTipSuppressed ? (
+                  <span className="rail-tip composer-context-tip" role="tooltip">
+                    {tip}
+                  </span>
+                ) : null}
               </div>
               <button
                 type="button"
@@ -1188,6 +1317,20 @@ export function Composer(props: {
           </div>
         </div>
       </footer>
+      {contextPopoverOpen ? (
+        <ContextBreakdownPopover
+          open={contextPopoverOpen}
+          onClose={closeContextPopover}
+          useSheet={pickerUseSheet}
+          composerDocked={!props.isEmpty}
+          sheetBottomPx={pickerUseSheet ? sheetBottomPx : null}
+          anchorRef={contextHostRef}
+          contextIdle={contextIdle}
+          contextPct={pct}
+          maxContextTokens={maxCtx}
+          breakdown={props.contextBreakdown}
+        />
+      ) : null}
       {pickerOpen
         ? createPortal(
             pickerUseSheet ? (
@@ -1203,12 +1346,25 @@ export function Composer(props: {
                   }}
                 />
                 <div
-                  className="slash-menu slash-menu--sheet"
+                  className={[
+                    "slash-menu slash-menu--sheet",
+                    !props.isEmpty ? "slash-menu--above-composer" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   data-testid={
                     atOpen ? "workspace-files-menu" : "slash-command-menu"
                   }
                   role="listbox"
                   aria-label={atOpen ? "Workspace files" : "Slash commands"}
+                  style={
+                    !props.isEmpty && sheetBottomPx != null
+                      ? {
+                          bottom: sheetBottomPx,
+                          ["--context-sheet-bottom" as string]: `${sheetBottomPx}px`,
+                        }
+                      : undefined
+                  }
                 >
                   {atOpen ? atMenuChrome : slashMenuChrome}
                 </div>

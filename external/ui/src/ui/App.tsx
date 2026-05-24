@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { CSSProperties } from "react";
 import { ChatScreen } from "./chat/ChatScreen";
+import { contextUsagePercent } from "./chat/contextUsage";
 import {
   HERO_ACCENT_VERBS,
   pickHeroAccentVerb,
@@ -203,6 +204,16 @@ type SessionStats = {
     inputTokens: number;
     outputTokens: number;
     totalTokens: number;
+  };
+  contextBreakdown?: {
+    systemPrompt: number;
+    toolDefinitions: number;
+    rules: number;
+    skills: number;
+    mcp: number;
+    subagents: number;
+    conversation: number;
+    estimatedTotal: number;
   };
 };
 
@@ -521,6 +532,57 @@ export function App() {
   itemsRef.current = items;
   const [draft, setDraft] = useState("");
   const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
+  const [contextBreakdown, setContextBreakdown] = useState<
+    SessionStats["contextBreakdown"] | null
+  >(null);
+
+  const applySessionStatsPayload = useCallback(
+    (stats: SessionStats | null | undefined, viewing: boolean) => {
+      if (!viewing) {
+        return;
+      }
+      if (stats?.tokenUsageTotal) {
+        const t = stats.tokenUsageTotal;
+        tokenBaselineRef.current = {
+          input: t.inputTokens || 0,
+          output: t.outputTokens || 0,
+          total: t.totalTokens || 0,
+        };
+        setTokenUsage({
+          inputTokens: tokenBaselineRef.current.input,
+          outputTokens: tokenBaselineRef.current.output,
+          totalTokens: tokenBaselineRef.current.total,
+        });
+      }
+      if (stats?.contextBreakdown) {
+        setContextBreakdown(stats.contextBreakdown);
+      } else {
+        setContextBreakdown(null);
+      }
+    },
+    [],
+  );
+
+  const refreshSessionStats = useCallback(
+    async (sid: string) => {
+      const key = sid.trim();
+      if (!key) {
+        return;
+      }
+      const statsRes = await fetchJSON<{ stats?: SessionStats | null }>(
+        `/coddy/sessions/${encodeURIComponent(key)}/stats`,
+        { headers: { [HDR]: key } },
+      );
+      if (!statsRes.ok) {
+        return;
+      }
+      applySessionStatsPayload(
+        statsRes.data?.stats,
+        viewedSessionIdRef.current.trim() === key,
+      );
+    },
+    [applySessionStatsPayload],
+  );
   const tokenBaselineRef = useRef<{
     input: number;
     output: number;
@@ -1589,6 +1651,7 @@ export function App() {
     setItems([]);
     setDraft("");
     setTokenUsage(null);
+    setContextBreakdown(null);
     setDescribePreview(null);
     reasoningDurationMsByContentRef.current = new Map();
     if (llmModelIds.length > 0) {
@@ -1629,6 +1692,7 @@ export function App() {
       return;
     }
     setTokenUsage(null);
+    setContextBreakdown(null);
     tokenBaselineRef.current = { input: 0, output: 0, total: 0 };
     const lifecycle = new AbortController();
     void (async () => {
@@ -1646,18 +1710,11 @@ export function App() {
         if (lifecycle.signal.aborted) {
           return;
         }
-        if (statsRes.ok && statsRes.data?.stats?.tokenUsageTotal) {
-          const t = statsRes.data.stats.tokenUsageTotal;
-          tokenBaselineRef.current = {
-            input: t.inputTokens || 0,
-            output: t.outputTokens || 0,
-            total: t.totalTokens || 0,
-          };
-          setTokenUsage({
-            inputTokens: tokenBaselineRef.current.input,
-            outputTokens: tokenBaselineRef.current.output,
-            totalTokens: tokenBaselineRef.current.total,
-          });
+        if (statsRes.ok && statsRes.data?.stats) {
+          applySessionStatsPayload(
+            statsRes.data.stats,
+            viewedSessionIdRef.current.trim() === sessionId,
+          );
         }
         const shadowSnap = streamShadowBySidRef.current.get(sessionId);
         if (
@@ -1928,6 +1985,7 @@ export function App() {
       void loadSessionsList(true);
       const viewing = viewedSessionIdRef.current.trim();
       void loadMessages(key, { skipSetItems: viewing !== key });
+      void refreshSessionStats(key);
     }
   }
 
@@ -2028,6 +2086,7 @@ export function App() {
       }
       if (viewingNow === streamKey) {
         setTokenUsage(null);
+        setContextBreakdown(null);
       }
 
       const reqBody: Record<string, unknown> = {
@@ -2271,6 +2330,7 @@ export function App() {
         skipSetItems: viewingEnd !== postSessionKey,
         preserveOnError: true,
       });
+      void refreshSessionStats(sidEffective);
       completedNormally = true;
     } catch (_err: unknown) {
       // AbortError stops the stream client-side after optional POST cancel
@@ -2352,13 +2412,10 @@ export function App() {
     [sessionId, llmModelIds, headers],
   );
 
-  const contextPct = useMemo(() => {
-    if (!tokenUsage || !maxContextTokens) return 0;
-    return Math.min(
-      100,
-      Math.max(0, (tokenUsage.totalTokens / maxContextTokens) * 100),
-    );
-  }, [tokenUsage, maxContextTokens]);
+  const contextPct = useMemo(
+    () => contextUsagePercent(maxContextTokens, contextBreakdown),
+    [maxContextTokens, contextBreakdown],
+  );
 
   const onSchedulerRunJob = useCallback(
     async (jobId: string) => {
@@ -2657,6 +2714,7 @@ export function App() {
           tokenUsage={tokenUsage}
           contextPct={contextPct}
           maxContextTokens={maxContextTokens}
+          contextBreakdown={contextBreakdown}
           mode={mode}
           modes={[...PROFILE_MODES]}
           {...(llmModelIds.length > 0

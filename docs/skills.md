@@ -28,7 +28,7 @@ Skills are discovered by searching for **`SKILL.md`** under each configured dire
 
 ### Root `.md` / `.mdc` in skill directories
 
-Optional rule-like files at the **root** of a skill directory (not under **`.cursor/rules/`**) can be loaded as skills when listed in **`skills.dirs`**. Prefer **`.coddy/rules/`** or **`.cursor/rules/`** for project rules so activation (**globs**, **`@mention`**, sticky auto rules) follows the rules engine.
+Optional markdown at the **root** of a **`skills.dirs`** entry (not under **`.cursor/rules/`**) may register as slash skills. **Project rules** belong under **`.coddy/rules/`**, **`.cursor/rules/`**, and the other trees in **[rules.md](rules.md)** - not in **`skills.dirs`**.
 
 ## Loading priority
 

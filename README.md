@@ -46,7 +46,8 @@ Coddy is a distroless-friendly **harness**: drop it into minimal images (`scratc
 - [How to update](#how-to-update)
 - [Operating modes](#operating-modes)
 - [Editor and IDE integration](#editor-and-ide-integration)
-- [Cursor rules and skills](#cursor-rules-and-skills)
+- [Rules](#rules)
+- [Skills](#skills)
 - [MCP server integration](#mcp-server-integration)
 - [Configuration (reference)](#configuration-1)
 - [Architecture](#architecture)
@@ -317,11 +318,9 @@ Best for: architecture planning, writing specs, design documents, code review.
 
 Use your editor session mode selector (or **`session/set_config_option`**).
 
-## Rules and skills
+## Rules
 
-**Rules** (injected as **`{{.Rules}}`**) are discovered under the session working directory from **`.coddy/rules`**, **`.cursor/rules`**, **`.claude/rules`**, and **`.codex/rules`** when **`rules.auto_discover`** is true. See **[`docs/rules.md`](docs/rules.md)**.
-
-**Skills** (slash commands, **`{{.Skills}}`**) are loaded from **`skills.dirs`**. Defaults: **`${CODDY_HOME}/skills`**, **`${CWD}/.skills`**, **`~/.cursor/skills`**, **`~/.claude/skills`**. See **`skills`** in **[`docs/config.md`](docs/config.md)** and **[`docs/skills.md`](docs/skills.md)**.
+Project rules (injected as **`{{.Rules}}`**) are discovered under the session working directory from **`.coddy/rules`**, **`.cursor/rules`**, **`.claude/rules`**, and **`.codex/rules`** when **`rules.auto_discover`** is true. See **[`docs/rules.md`](docs/rules.md)**.
 
 Rule files often use Cursor-style frontmatter, for example:
 
@@ -336,7 +335,9 @@ Write all comments in English.
 Use fmt.Errorf("context: %w", err) for error wrapping.
 ```
 
-See [Skills Guide](docs/skills.md) for details.
+## Skills
+
+Slash commands and **`SKILL.md`** packs (injected as **`{{.Skills}}`**) are loaded from **`skills.dirs`**. Defaults: **`${CODDY_HOME}/skills`**, **`${CWD}/.skills`**, **`~/.cursor/skills`**, **`~/.claude/skills`**. See **[`docs/config.md`](docs/config.md)** (`skills`) and **[`docs/skills.md`](docs/skills.md)**.
 
 ## MCP Server Integration
 

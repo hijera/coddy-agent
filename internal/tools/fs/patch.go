@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/EvilFreelancer/coddy-agent/internal/llm"
@@ -81,6 +82,9 @@ func executeApplyPatch(_ context.Context, argsJSON string, env *tooling.Env) (st
 // applyUnifiedDiff is a simple unified diff applicator for standard --- / +++ / @@ hunks.
 func applyUnifiedDiff(original, diff string) (string, error) {
 	lines := strings.Split(original, "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
 	diffLines := strings.Split(diff, "\n")
 
 	result := make([]string, len(lines))
@@ -91,17 +95,21 @@ func applyUnifiedDiff(original, diff string) (string, error) {
 
 	for _, dl := range diffLines {
 		if strings.HasPrefix(dl, "@@") {
-			var origStart, newStart int
-			_, _ = fmt.Sscanf(dl, "@@ -%d", &origStart)            //nolint:errcheck // hunk header shape varies
-			_, _ = fmt.Sscanf(dl, "@@ -%*d,%*d +%d", &newStart) //nolint:errcheck // hunk header shape varies
-			hunkStart = origStart - 1
+			origStart, err := parseHunkOrigStart(dl)
+			if err != nil {
+				return "", err
+			}
+			hunkStart = hunkOrigIndex(origStart)
 			origOffset = 0
 			inHunk = true
-			_ = newStart
 			continue
 		}
 
 		if !inHunk {
+			continue
+		}
+
+		if strings.HasPrefix(dl, `\`) {
 			continue
 		}
 
@@ -110,18 +118,56 @@ func applyUnifiedDiff(original, diff string) (string, error) {
 			continue
 		case strings.HasPrefix(dl, "-"):
 			idx := hunkStart + origOffset
-			if idx < len(result) {
-				result = append(result[:idx], result[idx+1:]...)
+			if idx < 0 || idx >= len(result) {
+				return "", fmt.Errorf("patch delete at line %d out of range (file has %d lines)", idx+1, len(result))
 			}
+			result = append(result[:idx], result[idx+1:]...)
 		case strings.HasPrefix(dl, "+"):
 			idx := hunkStart + origOffset
+			if idx < 0 {
+				idx = 0
+			}
+			if idx > len(result) {
+				idx = len(result)
+			}
 			newLine := dl[1:]
 			result = append(result[:idx], append([]string{newLine}, result[idx:]...)...)
 			origOffset++
 		case strings.HasPrefix(dl, " "):
 			origOffset++
+		case dl == "":
+			continue
+		default:
+			return "", fmt.Errorf("patch hunk line %q: expected leading ' ', '+', or '-'", dl)
 		}
 	}
 
 	return strings.Join(result, "\n"), nil
+}
+
+// hunkOrigIndex maps unified-diff 1-based origin line (0 = before first line) to a 0-based slice index.
+func hunkOrigIndex(origStart int) int {
+	if origStart <= 0 {
+		return 0
+	}
+	return origStart - 1
+}
+
+func parseHunkOrigStart(line string) (int, error) {
+	inner := strings.TrimSpace(strings.TrimPrefix(line, "@@"))
+	inner = strings.TrimSpace(strings.TrimSuffix(inner, "@@"))
+	if inner == "" {
+		return 0, fmt.Errorf("invalid hunk header %q", line)
+	}
+	oldPart, _, _ := strings.Cut(inner, " ")
+	oldPart = strings.TrimPrefix(oldPart, "-")
+	if oldPart == "" {
+		return 0, fmt.Errorf("invalid hunk header %q", line)
+	}
+	startStr, _, _ := strings.Cut(oldPart, ",")
+	origStart, err := strconv.Atoi(startStr)
+	if err != nil {
+		return 0, fmt.Errorf("invalid hunk header %q: %w", line, err)
+	}
+	return origStart, nil
 }

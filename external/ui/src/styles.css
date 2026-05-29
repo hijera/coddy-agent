@@ -267,6 +267,20 @@ body {
   min-height: 0;
 }
 
+@media (min-width: 1200px) {
+  .shell-main.shell-history-open > .main {
+    padding-left: calc(
+      min(
+          320px,
+          calc(
+            100vw - var(--rail-shell-track-width) - var(--nav-floating-gutter) -
+              16px
+          )
+        ) + 16px
+    );
+  }
+}
+
 /* Nav rail column */
 .rail-column {
   position: relative;

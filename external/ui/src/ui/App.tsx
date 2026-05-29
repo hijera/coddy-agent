@@ -589,6 +589,7 @@ export function App() {
   >(() => new Set(permissionPendingSessionIdsFromStorage()));
   const [toolsPermissionPolicy, setToolsPermissionPolicy] =
     useState<ToolsPermissionPolicy | null>(null);
+  const toolsPermissionPolicyRef = useRef<ToolsPermissionPolicy | null>(null);
   const [questionPendingSids, setQuestionPendingSids] = useState<Set<string>>(
     () => new Set(),
   );
@@ -939,6 +940,15 @@ export function App() {
           (x) => !(x.type === "permission_prompt" && x.id === itemId),
         );
       });
+      for (const delayMs of [0, 250, 900]) {
+        window.setTimeout(() => {
+          void loadMessages(key, {
+            preserveOnError: true,
+            skipSetItems: viewedSessionIdRef.current.trim() !== key,
+          });
+          void loadSessionsList(true);
+        }, delayMs);
+      }
     },
     [],
   );
@@ -1465,7 +1475,9 @@ export function App() {
         headers,
       });
       if (res.ok && res.data) {
-        setToolsPermissionPolicy(parseToolsPermissionPolicy(res.data));
+        const policy = parseToolsPermissionPolicy(res.data);
+        toolsPermissionPolicyRef.current = policy;
+        setToolsPermissionPolicy(policy);
       }
     })();
   }, [headers]);
@@ -1821,7 +1833,7 @@ export function App() {
     merged = mergePermissionPromptsIntoTranscript(
       merged,
       sid,
-      toolsPermissionPolicy,
+      toolsPermissionPolicyRef.current,
     );
     merged = mergeStoredQuestionPromptsIntoTranscript(merged, sid);
     merged = patchQuestionToolArgsFromPromptRecords(merged, sid);
@@ -2783,7 +2795,7 @@ export function App() {
   ]);
 
   const shellBackdropOpen =
-    sessionsOpen ||
+    (!drawersWide && sessionsOpen) ||
     (schedulerOpen && schedulerHttpLinked === true) ||
     settingsRoute;
 
@@ -2881,6 +2893,7 @@ export function App() {
       <div
         className={[
           "shell-main",
+          sessionsOpen ? "shell-history-open" : "",
           historyDrawerBesideScheduler ? "shell-history-beside-scheduler" : "",
         ]
           .filter(Boolean)

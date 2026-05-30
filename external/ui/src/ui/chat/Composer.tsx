@@ -1298,7 +1298,9 @@ export function Composer(props: {
                   </span>
                 ) : (
                   <span className="composer-send-glyph" aria-hidden="true">
-                    ▶
+                    <svg viewBox="0 0 12 12" fill="currentColor" width="17" height="17">
+                      <path d="M2 0L11 6L2 12Z" />
+                    </svg>
                   </span>
                 )}
               </button>

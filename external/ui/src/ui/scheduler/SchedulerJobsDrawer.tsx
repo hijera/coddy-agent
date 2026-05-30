@@ -195,7 +195,9 @@ export function SchedulerJobsDrawer(props: {
                   }}
                 >
                   <span className="composer-send-glyph" aria-hidden="true">
-                    ▶
+                    <svg viewBox="0 0 12 12" fill="currentColor" width="14" height="14">
+                      <path d="M2 0L12 6L2 12Z" />
+                    </svg>
                   </span>
                 </button>
               )}

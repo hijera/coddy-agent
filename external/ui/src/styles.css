@@ -2877,13 +2877,6 @@ textarea#composer {
   justify-content: center;
   margin: 0;
   padding: 0;
-  font-size: 18px;
-  line-height: 0;
-}
-
-.composer-run-icon--play .composer-send-glyph {
-  font-size: 22px;
-  transform: translate(calc(1px + 0.04em), -0.09em);
 }
 
 .composer-run-icon--stop .composer-send-glyph {
@@ -3362,15 +3355,6 @@ textarea#composer {
   min-height: 34px;
 }
 
-.scheduler-job-run-icon.composer-run-icon--play .composer-send-glyph {
-  font-size: 18px;
-  transform: translate(calc(1px + 0.04em), -0.09em);
-}
-
-.scheduler-job-run-icon.composer-run-icon--stop .composer-send-glyph {
-  font-size: 14px;
-  transform: translateY(-0.08em);
-}
 
 /* Scheduler list + job editor docked beside the rail (no fullscreen scrim). */
 .scheduler-dock-cluster {

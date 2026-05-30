@@ -1247,7 +1247,6 @@ a.rail-brand {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  animation: chat-fade-in 0.22s ease-out both;
   /* Match native scrollbar gutters so the docked composer does not paint over the scroll track */
   --coddy-chat-scrollbar-gutter: 14px;
 }
@@ -1291,6 +1290,7 @@ a.rail-brand {
   flex-direction: column;
   gap: 12px;
   padding: 0;
+  animation: chat-fade-in 0.22s ease-out both;
 }
 
 .chat-scroll-tail {

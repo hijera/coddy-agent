@@ -1654,6 +1654,12 @@ export function App() {
     for (const m of res.data.messages || []) {
       const role = (m.role || "").trim();
       if (role === "user") {
+        // Flush notices for the previous turn before starting a new one so
+        // error notices land at the end of the turn they belong to, not at
+        // the top of the next one.
+        if (userTurnIdx > 0) {
+          pushUiNoticesForTurn(userTurnIdx);
+        }
         userTurnIdx++;
         thinkingInTurn = 0;
         assistantInTurn = 0;
@@ -1668,7 +1674,6 @@ export function App() {
         if (mt) {
           next.push(memoryTranscriptFromApi(mt));
         }
-        pushUiNoticesForTurn(userTurnIdx);
         continue;
       }
       if (role === "assistant") {
@@ -1782,6 +1787,8 @@ export function App() {
         };
       }
     }
+    // Flush notices for the last turn (no subsequent user message to trigger it).
+    pushUiNoticesForTurn(userTurnIdx);
 
     // Enrich tool calls with persisted previews when available.
     const tcRes = await fetchJSON<{ toolCalls: ToolCallListRow[] }>(

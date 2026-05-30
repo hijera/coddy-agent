@@ -221,3 +221,55 @@ test("elapsed freezes while permission is pending", () => {
   expect(container.querySelector(".thinking-dur")?.textContent).toBe(durBefore);
   vi.useRealTimers();
 });
+
+test("apply_patch renders DiffView instead of raw args JSON", () => {
+  const patch = [
+    "--- a/src/app.ts",
+    "+++ b/src/app.ts",
+    "@@ -1,2 +1,3 @@",
+    " line1",
+    "+added",
+    " line2",
+  ].join("\n");
+  const argsText = JSON.stringify({ filePath: "src/app.ts", patch });
+  const { container } = render(
+    <ToolCallMessage
+      toolCallId="tc-patch-1"
+      title="apply_patch"
+      kind="write"
+      status="completed"
+      argsText={argsText}
+      resultText="patch applied successfully to src/app.ts"
+      durationMs={12}
+    />,
+  );
+  openToolDetails();
+  // DiffView rendered
+  expect(container.querySelector(".diff-block")).not.toBeNull();
+  // file path shown
+  expect(container.querySelector(".diff-file-path")?.textContent).toContain("src/app.ts");
+  // add line class present
+  expect(container.querySelectorAll(".diff-line--add").length).toBeGreaterThanOrEqual(1);
+  // raw args JSON not shown
+  expect(container.querySelector("pre.tool-block[aria-label='Tool arguments']")).toBeNull();
+});
+
+test("apply_patch result text still shown after DiffView", () => {
+  const patch = "@@ -1 +1 @@\n+new";
+  const argsText = JSON.stringify({ filePath: "x.ts", patch });
+  const { container } = render(
+    <ToolCallMessage
+      toolCallId="tc-patch-2"
+      title="apply_patch"
+      kind="write"
+      status="completed"
+      argsText={argsText}
+      resultText="patch applied successfully to x.ts"
+      durationMs={5}
+    />,
+  );
+  openToolDetails();
+  expect(container.querySelector(".diff-block")).not.toBeNull();
+  const result = container.querySelector("[aria-label='Tool result']");
+  expect(result?.textContent).toContain("patch applied successfully");
+});

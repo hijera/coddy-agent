@@ -11,6 +11,7 @@ import {
   parseQuestionToolQuestionsFromArgs,
 } from "../chat/questionToolDisplay";
 import { toolCallArgsDisplay } from "../chat/toolCallArgsDisplay";
+import { DiffView } from "./DiffView";
 
 function safePrettyJSON(text: string): string {
   try {
@@ -115,6 +116,22 @@ export function ToolCallMessage(props: {
   const isQuestionTool =
     rawName.toLowerCase() === "question" ||
     (props.kind || "").toLowerCase() === "question";
+
+  const isPatchTool = rawName.toLowerCase() === "apply_patch";
+
+  const patchContent = useMemo(() => {
+    if (!isPatchTool || !props.argsText) return null;
+    try {
+      const parsed = JSON.parse(props.argsText) as Record<string, unknown>;
+      return typeof parsed.patch === "string"
+        ? parsed.patch
+        : typeof parsed.diff === "string"
+          ? parsed.diff
+          : null;
+    } catch {
+      return null;
+    }
+  }, [isPatchTool, props.argsText]);
 
   const displayLabel = useMemo(() => {
     if (isQuestionTool) {
@@ -260,12 +277,14 @@ export function ToolCallMessage(props: {
 
   const viewportMode = showExpanded && full ? "scroll" : "clip";
 
-  const showJsonArgs = !!args && !isQuestionTool;
+  const showJsonArgs = !!args && !isQuestionTool && !isPatchTool;
+  const showDiffView = isPatchTool && !!patchContent;
   const showJsonResult =
     !isQuestionTool && !!(resultBody && resultBody.length > 0);
   const hasBody =
     isQuestionTool ||
     showJsonArgs ||
+    showDiffView ||
     showJsonResult ||
     !!toggleLink;
 
@@ -306,6 +325,9 @@ export function ToolCallMessage(props: {
               <pre className="tool-block" aria-label="Tool arguments">
                 {args}
               </pre>
+            ) : null}
+            {showDiffView && patchContent ? (
+              <DiffView patch={patchContent} filePath={args} />
             ) : null}
             {showJsonResult ? (
               <div

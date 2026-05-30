@@ -8,6 +8,19 @@ export function toolCallArgsDisplay(
   if (!raw) return "";
 
   const kind = (opts?.kind || opts?.title || "").trim().toLowerCase();
+
+  // apply_patch: the diff itself is rendered by DiffView; only show the file path as label.
+  if (kind === "apply_patch") {
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const fp =
+        typeof parsed.filePath === "string" ? parsed.filePath.trim() : "";
+      return fp || "";
+    } catch {
+      return "";
+    }
+  }
+
   const shellLike =
     kind === "run_command" ||
     kind === "shell" ||

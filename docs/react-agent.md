@@ -37,7 +37,8 @@ Working directory: {{.CWD}}
 {{.Tools}}
 {{end}}
 
-{{if .Skills}} ... active skills markdown ... {{end}}
+{{if .Skills}} ... skill catalog + always-active/glob-matched bodies
+          (invoked /name bodies are injected into the user message instead) ... {{end}}
 
 {{if .TodoList}}
 ### Current todo checklist
@@ -91,6 +92,7 @@ messages: [
 1. BUILD_MESSAGES
    - Load applicable skills and project rules for current context (separate prompt sections)
    - Build system prompt (template + TemplateData incl. TodoList snapshot)
+   - For the last user message, detect `/name` invocations: prepend each matched skill's body to the message content before the LLM call. This augmentation is ephemeral — not persisted to session history, not shown in the chat transcript.
    - Prepend system to session history (user turn already persisted on Run entry)
 
 2. LLM_CALL

@@ -702,12 +702,7 @@ func openAPISpec() map[string]interface{} {
 						"name":        map[string]string{"type": "string", "description": "Canonical skill name."},
 						"description": map[string]string{"type": "string"},
 						"file_path":   map[string]string{"type": "string"},
-						"always_apply": map[string]interface{}{"type": "boolean"},
-						"globs": map[string]interface{}{
-							"type":  "array",
-							"items": map[string]string{"type": "string"},
-						},
-						"disabled": map[string]interface{}{"type": "boolean", "description": "True when the skill is in the disabled list."},
+						"enabled": map[string]interface{}{"type": "boolean", "description": "False when the skill is in the disabled list."},
 					},
 				},
 				"SkillList": map[string]interface{}{

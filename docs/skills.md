@@ -110,9 +110,8 @@ Optional frontmatter controls when the skill is injected:
 ---
 name: code-review          # optional override; defaults to directory/file name
 description: One-line summary shown in the slash-command catalog and UI.
-alwaysApply: false         # true = always prepend to system prompt
 globs:
-  - "**/*.go"              # inject when any open file matches
+  - "**/*.go"              # inject body when any open file matches; omit for always-active
 ---
 
 # Code Review
@@ -142,7 +141,6 @@ Create a directory anywhere and add `SKILL.md`:
 ---
 name: my-skill
 description: Short description shown in the catalog.
-alwaysApply: false
 ---
 
 # My Skill
@@ -161,9 +159,9 @@ To share it with others, publish to GitHub and list it on [skills.sh](https://sk
 On each `session/prompt` the agent:
 
 1. Scans `skills.dirs` for the session cwd and `CODDY_HOME`.
-2. Filters skills: `alwaysApply: true` and glob matches are included in the system prompt unconditionally; others are available as slash commands.
-3. Builds the **`{{.Skills}}`** template block (catalog + active bodies).
-4. Merges invoked `/name` tokens from the user message into the active set for that turn.
+2. Filters skills: skills with no globs are always-active; skills with globs are active when any glob matches a file in context.
+3. Builds the **`{{.Skills}}`** system-prompt block: the slash-command catalog listing all skills, plus the full body of any always-active or glob-matched skill whose name is **not** already in the catalog.
+4. At LLM call time, if the last user message contains `/name` invocations, each matched skill's body is **prepended to the user message** before it is sent to the model. This augmentation happens only inside the LLM request — it is **not stored in session history** and is **not visible in the chat transcript**.
 
 ACP clients receive `available_commands_update` after `session/new` and `session/load`. The HTTP UI queries `GET /coddy/slash-commands` for autocomplete.
 
@@ -171,7 +169,7 @@ ACP clients receive `available_commands_update` after `session/new` and `session
 
 ## References
 
-- Implementation: `internal/skills/`, wiring in `internal/session/`, `internal/agent/system_prompt.go`
+- Implementation: `internal/skills/`, wiring in `internal/session/`, `internal/agent/system_prompt.go`, `internal/agent/react.go`
 - Config reference: [config.md](config.md) → `skills`
 - Rules (separate mechanism): [rules.md](rules.md)
 - Registry UI: Settings → Skills (requires `coddy http`)

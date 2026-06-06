@@ -17,12 +17,10 @@ func (s *Server) registerSkillsManagementRoutes() {
 }
 
 type skillRowResponse struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	FilePath    string   `json:"file_path"`
-	AlwaysApply bool     `json:"always_apply"`
-	Globs       []string `json:"globs,omitempty"`
-	Disabled    bool     `json:"disabled"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	FilePath    string `json:"file_path"`
+	Enabled     bool   `json:"enabled"`
 }
 
 // coddySkillsGet lists all skills with their enabled/disabled state.
@@ -57,12 +55,10 @@ func (s *Server) coddySkillsGet(w http.ResponseWriter, r *http.Request) {
 		row := skillRowResponse{
 			Name:        sum.Name,
 			Description: sum.Description,
-			Disabled:    skills.IsDisabled(disabled, sum.Name),
+			Enabled:     !skills.IsDisabled(disabled, sum.Name),
 		}
 		if sk != nil {
 			row.FilePath = sk.FilePath
-			row.AlwaysApply = sk.AlwaysApply
-			row.Globs = sk.Globs
 		}
 		rows = append(rows, row)
 	}

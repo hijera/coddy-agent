@@ -21,7 +21,6 @@ func TestAugmentUserMessageWithInvokedSkills_bodyInjected(t *testing.T) {
 		Name:        "SKILL",
 		FilePath:    filepath.Join("skills", "find-skills", "SKILL.md"),
 		Description: "find skills",
-		AlwaysApply: false,
 		Content:     body,
 	}
 
@@ -79,7 +78,6 @@ func TestBuildSkillsPromptMarkdown_catalogSkillBodyNotInSystemPrompt(t *testing.
 		Name:        "SKILL",
 		FilePath:    filepath.Join("skills", "find-skills", "SKILL.md"),
 		Description: "find skills",
-		AlwaysApply: false,
 		Content:     body,
 	}
 
@@ -96,16 +94,15 @@ func TestBuildSkillsPromptMarkdown_catalogSkillBodyNotInSystemPrompt(t *testing.
 	}
 }
 
-// TestBuildSkillsPromptMarkdown_alwaysApplyNonCatalogBodyInSystemPrompt verifies that a
-// skill with alwaysApply:true that is NOT in the catalog still has its body in the system prompt.
-func TestBuildSkillsPromptMarkdown_alwaysApplyNonCatalogBodyInSystemPrompt(t *testing.T) {
-	const body = "ALWAYS_APPLY_NON_CATALOG_BODY"
+// TestBuildSkillsPromptMarkdown_noGlobNonCatalogBodyInSystemPrompt verifies that a
+// skill with no globs that is NOT in the catalog has its body in the system prompt.
+func TestBuildSkillsPromptMarkdown_noGlobNonCatalogBodyInSystemPrompt(t *testing.T) {
+	const body = "NO_GLOB_NON_CATALOG_BODY"
 	// This skill uses a path that doesn't become a slash command name in the catalog.
 	sk := &skills.Skill{
-		Name:        "my-always-rule",
-		FilePath:    filepath.Join("rules", "my-always-rule.md"),
-		AlwaysApply: true,
-		Content:     body,
+		Name:     "my-always-rule",
+		FilePath: filepath.Join("rules", "my-always-rule.md"),
+		Content:  body,
 	}
 
 	allLoaded := []*skills.Skill{sk}

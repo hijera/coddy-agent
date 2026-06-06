@@ -24,9 +24,8 @@ func TestLoadSkillWithFrontmatter(t *testing.T) {
 	tmp := t.TempDir()
 
 	content := `---
+name: "go-standards"
 description: "Go coding standards"
-globs: ["**/*.go"]
-alwaysApply: false
 ---
 
 # Go Standards
@@ -52,14 +51,11 @@ Use fmt.Errorf for error wrapping.
 	}
 
 	s := loaded[0]
+	if s.Name != "go-standards" {
+		t.Errorf("expected name %q from frontmatter, got %q", "go-standards", s.Name)
+	}
 	if s.Description != "Go coding standards" {
 		t.Errorf("expected description %q, got %q", "Go coding standards", s.Description)
-	}
-	if len(s.Globs) != 1 || s.Globs[0] != "**/*.go" {
-		t.Errorf("unexpected globs: %v", s.Globs)
-	}
-	if s.AlwaysApply {
-		t.Error("expected alwaysApply to be false")
 	}
 	if !strings.Contains(s.Content, "Write comments") {
 		t.Errorf("expected content in skill body, got: %q", s.Content)
@@ -159,52 +155,18 @@ func TestLoadSymlinkDirWithSKILLMd(t *testing.T) {
 }
 
 func TestFilterForContext(t *testing.T) {
-	goRule := &skills.Skill{
-		Name:        "go-rule",
-		Globs:       []string{"**/*.go"},
-		AlwaysApply: false,
-		Content:     "Go rule content",
-	}
-	alwaysRule := &skills.Skill{
-		Name:        "always-rule",
-		AlwaysApply: true,
-		Content:     "Always rule content",
-	}
-	tsRule := &skills.Skill{
-		Name:        "ts-rule",
-		Globs:       []string{"**/*.ts"},
-		AlwaysApply: false,
-		Content:     "TypeScript rule content",
-	}
+	a := &skills.Skill{Name: "a", Content: "content a"}
+	b := &skills.Skill{Name: "b", Content: "content b"}
+	c := &skills.Skill{Name: "c", Content: "content c"}
 
-	allSkills := []*skills.Skill{goRule, alwaysRule, tsRule}
+	all := []*skills.Skill{a, b, c}
 
-	// With Go files in context.
-	goFiles := []string{"/project/main.go", "/project/server.go"}
-	filtered := skills.FilterForContext(allSkills, goFiles)
-	if len(filtered) != 2 {
-		t.Errorf("expected 2 skills for Go context, got %d", len(filtered))
-	}
-	for _, s := range filtered {
-		if s.Name == "ts-rule" {
-			t.Error("ts-rule should not be included for Go files")
+	// All skills are always returned regardless of context files.
+	for _, contextFiles := range [][]string{nil, {"/project/main.go"}, {"/project/app.ts"}} {
+		filtered := skills.FilterForContext(all, contextFiles)
+		if len(filtered) != 3 {
+			t.Errorf("expected 3 skills for context %v, got %d", contextFiles, len(filtered))
 		}
-	}
-
-	// With TypeScript files in context.
-	tsFiles := []string{"/project/app.ts"}
-	filtered = skills.FilterForContext(allSkills, tsFiles)
-	if len(filtered) != 2 {
-		t.Errorf("expected 2 skills for TS context, got %d", len(filtered))
-	}
-
-	// With no context files - only alwaysApply and no-glob rules.
-	filtered = skills.FilterForContext(allSkills, nil)
-	if len(filtered) != 1 {
-		t.Errorf("expected 1 skill for empty context, got %d", len(filtered))
-	}
-	if filtered[0].Name != "always-rule" {
-		t.Errorf("expected always-rule, got %q", filtered[0].Name)
 	}
 }
 

@@ -4,9 +4,7 @@ type InstalledSkill = {
   name: string;
   description: string;
   file_path: string;
-  always_apply: boolean;
-  globs?: string[];
-  disabled: boolean;
+  enabled: boolean;
 };
 
 async function fetchInstalled(): Promise<InstalledSkill[]> {
@@ -69,7 +67,7 @@ export function SkillsPanel(props: { onClose: () => void }) {
 
   const onToggle = (skill: InstalledSkill) => {
     void withBusy(skill.name, async () => {
-      const action = skill.disabled ? "enable" : "disable";
+      const action = skill.enabled ? "disable" : "enable";
       const res = await apiPost(`/coddy/skills/${encodeURIComponent(skill.name)}/${action}`);
       if (!res.ok) {
         setError(res.error || `Failed to ${action}`);
@@ -121,7 +119,7 @@ export function SkillsPanel(props: { onClose: () => void }) {
                       gap: "8px",
                       padding: "8px 0",
                       borderBottom: "1px solid var(--surface2, #333)",
-                      opacity: sk.disabled ? 0.5 : 1,
+                      opacity: sk.enabled ? 1 : 0.5,
                     }}
                   >
                     <IconPlug />
@@ -139,9 +137,9 @@ export function SkillsPanel(props: { onClose: () => void }) {
                       style={{ fontSize: "0.75rem", padding: "2px 8px" }}
                       disabled={!!busy[sk.name]}
                       onClick={() => onToggle(sk)}
-                      title={sk.disabled ? "Enable" : "Disable"}
+                      title={sk.enabled ? "Disable" : "Enable"}
                     >
-                      {sk.disabled ? "Enable" : "Disable"}
+                      {sk.enabled ? "Disable" : "Enable"}
                     </button>
                   </li>
                 ))}

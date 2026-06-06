@@ -14,20 +14,14 @@ import (
 
 // Skill represents a loaded skill or cursor rule.
 type Skill struct {
-	// Name is the short identifier (filename without extension).
+	// Name is the short identifier (from frontmatter or derived from filename/dir).
 	Name string
 
 	// FilePath is the absolute path to the source file.
 	FilePath string
 
-	// Description from frontmatter.
+	// Description from frontmatter (required for valid skills).
 	Description string
-
-	// Globs is a list of file patterns. If any match, the skill is applied.
-	Globs []string
-
-	// AlwaysApply means the skill is always included regardless of context.
-	AlwaysApply bool
 
 	// Content is the body of the skill file (without frontmatter).
 	Content string
@@ -104,28 +98,10 @@ func (l *Loader) LoadAll(cwd, agentHome string, installDir ...string) ([]*Skill,
 	return result, nil
 }
 
-// FilterForContext returns skills applicable to the given context files.
-// Always-apply skills are always included.
-func FilterForContext(skills []*Skill, contextFiles []string) []*Skill {
-	var result []*Skill
-	for _, s := range skills {
-		if s.AlwaysApply {
-			result = append(result, s)
-			continue
-		}
-		if len(s.Globs) == 0 {
-			// No globs and not alwaysApply = always apply.
-			result = append(result, s)
-			continue
-		}
-		for _, pattern := range s.Globs {
-			if matchesAny(pattern, contextFiles) {
-				result = append(result, s)
-				break
-			}
-		}
-	}
-	return result
+// FilterForContext returns skills applicable to the given context.
+// All loaded skills are always active (no glob filtering).
+func FilterForContext(skills []*Skill, _ []string) []*Skill {
+	return skills
 }
 
 // BuildSystemPromptSection builds the skills section for the system prompt.
@@ -217,19 +193,20 @@ func loadFile(path string) (*Skill, error) {
 	skill.Content = strings.TrimSpace(body)
 
 	if fm != nil {
+		if fm.Name != "" {
+			skill.Name = fm.Name
+		}
 		skill.Description = fm.Description
-		skill.Globs = fm.Globs
-		skill.AlwaysApply = fm.AlwaysApply
 	}
 
 	return skill, nil
 }
 
 // frontmatter is the YAML frontmatter of a skill file.
+// Only name and description are supported; name overrides the filesystem-derived name when set.
 type frontmatter struct {
-	Description string   `yaml:"description"`
-	Globs       []string `yaml:"globs"`
-	AlwaysApply bool     `yaml:"alwaysApply"`
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
 }
 
 // parseFrontmatter splits a file into frontmatter and body.
@@ -267,29 +244,6 @@ func parseFrontmatter(data []byte) (string, *frontmatter) {
 	}
 
 	return body, &fm
-}
-
-// matchesAny checks if any context file matches a glob pattern.
-// Handles **/ prefix patterns by matching against the basename or full path.
-func matchesAny(pattern string, files []string) bool {
-	// Strip **/ prefix for simpler matching.
-	simplePattern := strings.TrimPrefix(pattern, "**/")
-
-	for _, f := range files {
-		// Match against full path.
-		if matched, err := filepath.Match(pattern, f); err == nil && matched {
-			return true
-		}
-		// Match against just the basename.
-		if matched, err := filepath.Match(simplePattern, filepath.Base(f)); err == nil && matched {
-			return true
-		}
-		// Match simplified pattern against full path.
-		if matched, err := filepath.Match(simplePattern, f); err == nil && matched {
-			return true
-		}
-	}
-	return false
 }
 
 // expandPath resolves ${CODDY_HOME}, ${CWD}, and ~ in a path.

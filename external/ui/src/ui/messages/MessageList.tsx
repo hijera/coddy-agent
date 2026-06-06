@@ -50,6 +50,7 @@ export function MessageList(props: {
     resolved: PermissionResolvedState,
   ) => void;
   sessionId?: string;
+  knownSkillNames?: Set<string>;
   onPlanDocumentExpanded?: (itemId: string, expanded: boolean) => void;
   onPlanDocumentRun?: (slug: string) => void;
   onPlanDocumentDiscard?: (itemId: string, slug: string) => void;
@@ -82,6 +83,7 @@ export function MessageList(props: {
               key={it.id}
               content={it.content}
               {...(it.createdAtUtc ? { createdAtUtc: it.createdAtUtc } : {})}
+              {...(props.knownSkillNames ? { knownSkillNames: props.knownSkillNames } : {})}
               {...(props.onEdit
                 ? { onEdit: (c) => props.onEdit!(c, myIdx) }
                 : {})}

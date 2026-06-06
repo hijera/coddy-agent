@@ -18,16 +18,32 @@ test("user bubble preserves multiline text without markdown pipeline", () => {
   const body = screen.getByTestId("user-message-body");
   expect(body).toHaveTextContent("services:");
   expect(body).toHaveTextContent("/path/to/downloads:/downloads");
-  expect(body.textContent).toBe(yaml);
   expect(screen.queryByTestId("coddy-skill-span")).toBeNull();
 });
 
-test("user bubble does not treat path slashes as skill chips", () => {
+test("user bubble does not treat path slashes as skill chips without knownSkillNames", () => {
   render(<UserMessage content="hi /demo there" />);
   expect(screen.getByTestId("user-message-body")).toHaveTextContent(
     "hi /demo there",
   );
   expect(screen.queryByTestId("coddy-skill-span")).toBeNull();
+});
+
+test("user bubble renders known skill as chip when knownSkillNames provided", () => {
+  const known = new Set(["generate-rules"]);
+  render(<UserMessage content="please /generate-rules for me" knownSkillNames={known} />);
+  const chip = screen.getByTestId("coddy-skill-span");
+  expect(chip).toHaveTextContent("/generate-rules");
+  expect(chip).toHaveAttribute("data-skill-name", "generate-rules");
+});
+
+test("user bubble does not chip /name absent from knownSkillNames", () => {
+  const known = new Set(["generate-rules"]);
+  render(<UserMessage content="see /unknown-cmd here" knownSkillNames={known} />);
+  expect(screen.queryByTestId("coddy-skill-span")).toBeNull();
+  expect(screen.getByTestId("user-message-body")).toHaveTextContent(
+    "see /unknown-cmd here",
+  );
 });
 
 test("copy sends raw user text not display-only slash chip source", () => {

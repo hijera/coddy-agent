@@ -80,6 +80,7 @@ export function ChatScreen(props: {
   onBranchSwitch?: (sessionId: string) => void;
   sessionLoading?: boolean;
   sessionFadingOut?: boolean;
+  knownSkillNames?: Set<string>;
 }) {
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const composerHostRef = useRef<HTMLDivElement | null>(null);
@@ -236,6 +237,7 @@ export function ChatScreen(props: {
               {...(props.generating === true && props.onStop !== undefined
                 ? { generating: true, onStop: props.onStop }
                 : {})}
+              {...(props.knownSkillNames ? { knownSkillNames: props.knownSkillNames } : {})}
             />
           </div>
         </div>
@@ -293,6 +295,7 @@ export function ChatScreen(props: {
                 {...(props.onBranchSwitch
                   ? { onBranchSwitch: props.onBranchSwitch }
                   : {})}
+                {...(props.knownSkillNames ? { knownSkillNames: props.knownSkillNames } : {})}
               />
             </div>
             <div className="chat-scroll-tail" aria-hidden />
@@ -333,6 +336,7 @@ export function ChatScreen(props: {
                 {...(props.generating === true && props.onStop !== undefined
                   ? { generating: true, onStop: props.onStop }
                   : {})}
+                {...(props.knownSkillNames ? { knownSkillNames: props.knownSkillNames } : {})}
               />
             </div>
           </div>

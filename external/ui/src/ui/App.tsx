@@ -571,6 +571,9 @@ function reasoningDurationCacheKey(text: string): string {
 }
 
 export function App() {
+  const [knownSkillNames, setKnownSkillNames] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [sessionId, setSessionId] = useState("");
   /** Increments on each explicit "new chat" home transition so the hero verb rotates. */
   const [heroHomeGeneration, setHeroHomeGeneration] = useState(() =>
@@ -1259,6 +1262,17 @@ export function App() {
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, [applyLocationHash]);
+
+  useEffect(() => {
+    void (async () => {
+      const res = await fetchJSON<{ items?: Array<{ name: string }> }>(
+        "/coddy/slash-commands?page=1&page_size=200",
+      );
+      if (res.ok && res.data?.items) {
+        setKnownSkillNames(new Set(res.data.items.map((i) => i.name)));
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (!schedulerOpen || schedulerHttpLinked === false) {
@@ -3262,6 +3276,7 @@ export function App() {
             setEditingUserMsgIdx(userMsgIdx);
           }}
           onBranchSwitch={(sid) => switchBranch(sid)}
+          {...(knownSkillNames.size > 0 ? { knownSkillNames } : {})}
           onSend={(text: string) => {
             if (
               sessionId.trim() &&

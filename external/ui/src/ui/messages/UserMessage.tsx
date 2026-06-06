@@ -1,4 +1,5 @@
 import { stripCoddyAttachmentsForUserDisplay } from "../skills/stripCoddyAttachments";
+import { segmentSlashKnownSpans } from "../skills/segmentComposerSlashSpans";
 import {
   formatUtcToLocalFullDetail,
   formatUtcToLocalHM,
@@ -8,6 +9,8 @@ import { MessageCopyIconButton } from "./MessageCopyIconButton";
 export function UserMessage(props: {
   content: string;
   createdAtUtc?: string;
+  /** Known skill names — renders `/name` tokens as chip spans when the name is in the set. */
+  knownSkillNames?: Set<string>;
   /** Called when the user clicks the Edit button. */
   onEdit?: (content: string) => void;
 }) {
@@ -19,11 +22,31 @@ export function UserMessage(props: {
     props.createdAtUtc && timeHM
       ? formatUtcToLocalFullDetail(props.createdAtUtc)
       : "";
+  const bodySegments =
+    props.knownSkillNames && props.knownSkillNames.size > 0
+      ? segmentSlashKnownSpans(display, props.knownSkillNames)
+      : null;
+
   return (
     <div className="msg-user-stack">
       <div className="msg msg-user msg-user--editable">
         <div className="msg-user-body" data-testid="user-message-body">
-          {display}
+          {bodySegments
+            ? bodySegments.map((seg, i) =>
+                seg.type === "slash" ? (
+                  <span
+                    key={i}
+                    className="coddy-skill-chip"
+                    data-testid="coddy-skill-span"
+                    data-skill-name={seg.name}
+                  >
+                    {seg.literal}
+                  </span>
+                ) : (
+                  <span key={i}>{seg.value}</span>
+                ),
+              )
+            : display}
         </div>
         {props.onEdit ? (
           <button

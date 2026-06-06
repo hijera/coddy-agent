@@ -5,18 +5,19 @@ package config
 type Config struct {
 	Paths Paths `yaml:"-"`
 
-	Providers  []ProviderConfig  `yaml:"providers"`
-	Models     []ModelEntry      `yaml:"models"`
-	Agent      Agent             `yaml:"agent"`
-	Prompts    Prompts           `yaml:"prompts"`
-	Skills     Skills            `yaml:"skills"`
-	Rules      Rules             `yaml:"rules"`
-	MCPServers []MCPServerConfig `yaml:"mcp_servers"`
-	Tools      Tools             `yaml:"tools"`
-	Logger     Logger            `yaml:"logger"`
-	Sessions   Sessions          `yaml:"sessions"`
-	Memory     MemoryConfig      `yaml:"memory"`
-	HTTPServer HTTPServerConfig  `yaml:"httpserver"`
-	Scheduler  SchedulerConfig   `yaml:"scheduler"`
-	Gateways   GatewayConfig     `yaml:"gateways"`
+	Providers    []ProviderConfig  `yaml:"providers"`
+	Models       []ModelEntry      `yaml:"models"`
+	Agent        Agent             `yaml:"agent"`
+	Prompts      Prompts           `yaml:"prompts"`
+	Instructions Instructions      `yaml:"instructions"`
+	Skills       Skills            `yaml:"skills"`
+	Rules        Rules             `yaml:"rules"`
+	MCPServers   []MCPServerConfig `yaml:"mcp_servers"`
+	Tools        Tools             `yaml:"tools"`
+	Logger       Logger            `yaml:"logger"`
+	Sessions     Sessions          `yaml:"sessions"`
+	Memory       MemoryConfig      `yaml:"memory"`
+	HTTPServer   HTTPServerConfig  `yaml:"httpserver"`
+	Scheduler    SchedulerConfig   `yaml:"scheduler"`
+	Gateways     GatewayConfig     `yaml:"gateways"`
 }

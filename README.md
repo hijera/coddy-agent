@@ -64,7 +64,7 @@ Coddy is a distroless-friendly **harness**: drop it into minimal images (`scratc
 - **ReAct loop** - LLM alternates between reasoning, acting (tool calls), and observing results (coding-agent persona out of the box)
 - **Two operating modes** - `agent` (full tool access) and `plan` (planning + text files only)
 - **Rules** - auto-discovers **`.cursor/rules/`**, **`.coddy/rules/`**, **`.claude/rules/`**, and **`.codex/rules/`** under the session cwd - see [Rules](docs/rules.md)
-- **Skills** - slash commands and **`SKILL.md`** packs from **`skills.dirs`** (defaults include **`~/.cursor/skills`**) - see [Skills](docs/skills.md)
+- **Skills** - slash commands and **`SKILL.md`** packs from **`skills.dirs`** (defaults: **`~/.agents/skills`**, **`~/.coddy/skills`**, **`${CWD}/.coddy/skills`**; later dirs override earlier) - see [Skills](docs/skills.md)
 - **MCP server integration** - connect any MCP server for additional tools
 - **Multi-provider LLM** - OpenAI, Anthropic, Ollama, any OpenAI-compatible API
 - **ACP protocol** - Coddy is an **ACP server** (`coddy acp`); pair it with editors or scripts that implement an ACP client (see [Editor and IDE integration](#editor-and-ide-integration))
@@ -341,7 +341,33 @@ Use fmt.Errorf("context: %w", err) for error wrapping.
 
 ## Skills
 
-Slash commands and **`SKILL.md`** packs (injected as **`{{.Skills}}`**) are loaded from **`skills.dirs`**. Defaults: **`${CODDY_HOME}/skills`**, **`${CWD}/.skills`**, **`~/.cursor/skills`**, **`~/.claude/skills`**. See **[`docs/config.md`](docs/config.md)** (`skills`) and **[`docs/skills.md`](docs/skills.md)**.
+Slash commands and **`SKILL.md`** packs (injected as **`{{.Skills}}`**) extend the agent with domain knowledge and specialized workflows.
+
+**Default directories (lowest → highest priority):**
+
+| Priority | Path | Purpose |
+|----------|------|---------|
+| lowest | `~/.agents/skills/` | Global skills — installed by `npx skills` or `npx skillsbd`, shared with all agents |
+| ↑ | `~/.coddy/skills/` | Coddy-specific skills; may contain symlinks into `~/.agents/skills/` |
+| highest | `${CWD}/.coddy/skills/` | Project-local skills — override anything from higher directories |
+
+Later directories override earlier ones when the same skill name appears in multiple locations.
+
+**Finding and installing skills:**
+
+- **[skills.sh](https://skills.sh)** — community registry, install with `npx skills add <owner/repo@skill>`
+- **[neuraldeep.ru/skills](https://neuraldeep.ru/skills)** — skillsbd registry curated for Coddy, install with `npx skillsbd install <name>`
+- **Settings → Skills** in the web UI (`coddy http`) — browse and install from the skillsbd registry without leaving the browser
+
+**CLI:**
+
+```bash
+coddy skills list              # list installed skills with enabled/disabled status
+coddy skills enable <name>     # enable a skill
+coddy skills disable <name>    # disable without uninstalling
+```
+
+See **[`docs/skills.md`](docs/skills.md)** for the full reference.
 
 ## MCP Server Integration
 

@@ -56,6 +56,9 @@ type TemplateData struct {
 	// DiscardedPlans is plan-mode guidance when the user discarded design plan slugs (may be empty).
 	DiscardedPlans string
 
+	// Instructions is the concatenated content of project instruction files (AGENTS.md etc.), may be empty.
+	Instructions string
+
 	// UTCNow is the wall-clock instant in RFC3339 (UTC) at render time for model grounding.
 	UTCNow string
 }

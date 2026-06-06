@@ -8,28 +8,25 @@ import (
 
 // Skills is the YAML skills section (key skills).
 type Skills struct {
-	Dirs       []string `yaml:"dirs"`
-	InstallDir string   `yaml:"install_dir"`
+	Dirs []string `yaml:"dirs"`
 }
 
-// ApplyDefaults fills empty InstallDir and Dirs during config load.
-func (c *Skills) ApplyDefaults(coddyHome string, expandCODDYHome func(string) string) {
-	if strings.TrimSpace(c.InstallDir) == "" {
-		if coddyHome != "" {
-			c.InstallDir = filepath.Join(coddyHome, "skills")
-		} else {
-			c.InstallDir = expandSkillsHome("~/.coddy/skills")
-		}
-	} else {
-		c.InstallDir = filepath.Clean(expandCODDYHome(c.InstallDir))
+// ManagedDir returns the directory used for coddy-managed skills (enable/disable state,
+// UI-installed skills). Always resolves to ${CODDY_HOME}/skills or ~/.coddy/skills.
+func (c *Skills) ManagedDir(coddyHome string) string {
+	if coddyHome != "" {
+		return filepath.Join(coddyHome, "skills")
 	}
+	return expandSkillsHome("~/.coddy/skills")
+}
 
+// ApplyDefaults fills empty Dirs during config load.
+func (c *Skills) ApplyDefaults(coddyHome string, expandCODDYHome func(string) string) {
 	if len(c.Dirs) == 0 {
 		c.Dirs = []string{
+			"~/.agents/skills",
 			"${CODDY_HOME}/skills",
-			"${CWD}/.skills",
-			"~/.cursor/skills",
-			"~/.claude/skills",
+			"${CWD}/.coddy/skills",
 		}
 		return
 	}

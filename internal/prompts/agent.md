@@ -73,6 +73,12 @@ Statuses are **`pending`** (not started), **`in_progress`** (you are executing t
 {{.Rules}}
 
 {{end}}
+{{if .Instructions}}
+## Project instructions
+
+{{.Instructions}}
+
+{{end}}
 {{if .Memory}}
 ## Session memory
 

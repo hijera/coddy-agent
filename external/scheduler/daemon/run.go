@@ -146,7 +146,7 @@ func RunJobFile(ctx context.Context, cfg *config.Config, log *slog.Logger, proce
 	}
 
 	loader := skills.NewLoader(cfg.Skills.Dirs)
-	skillList, loadErr := loader.LoadAll(jobCWD, cfg.Paths.Home)
+	skillList, loadErr := loader.LoadAll(jobCWD, cfg.Paths.Home, cfg.Skills.ManagedDir(cfg.Paths.Home))
 	if loadErr != nil {
 		log.Warn("scheduler_run_skills", "job_id", jobID, "error", loadErr)
 		skillList = nil

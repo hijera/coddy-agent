@@ -1,104 +1,177 @@
 # Skills
 
-## Overview
+Skills are reusable instruction packs that extend the agent with slash commands, domain knowledge, and specialized workflows. They power the **`{{.Skills}}`** block in the system prompt and the slash-command catalog surfaced to ACP clients and the HTTP UI.
 
-Skills are reusable instruction packs discovered from **`skills.dirs`** in **`config.yaml`**. They power slash commands, the **`{{.Skills}}`** block in the system prompt, and ACP **`available_commands_update`** notifications.
+> **Project rules** (`.coddy/rules`, `.cursor/rules`, etc.) are a separate mechanism injected as **`{{.Rules}}`**. Do not place rules in `skills.dirs`. See [rules.md](rules.md).
 
-**Project rules** (**.cursor/rules**, **.coddy/rules**, etc.) are a **separate** mechanism. They are auto-discovered under the session **cwd** and injected as **`{{.Rules}}`**. See **[rules.md](rules.md)** - do not rely on **`skills.dirs`** to load **`.cursor/rules/`**.
+---
 
-## Supported file types
+## Where to get skills
 
-### Agent skills (`SKILL.md`)
+### skills.sh — community registry
 
-Skill files provide reusable instructions for specific tasks. Compatible with the Cursor skills layout (`subdir/SKILL.md`).
+The open agent skills ecosystem lives at **[https://skills.sh](https://skills.sh)**. Skills are plain GitHub repos with a `SKILL.md` file, compatible across agents that support the format (Cursor, Claude Code, Coddy, etc.).
 
-Format:
+Install via **`npx skills`** (Node.js required):
 
-```markdown
-# Skill Title
+```bash
+# Search the registry
+npx skills find [query]
 
-Short description of what this skill does.
+# Install a skill globally into ~/.agents/skills/
+npx skills add <owner/repo@skill>
 
-## Instructions
+# Update all installed skills
+npx skills update
 
-Detailed instructions...
+# Check for updates
+npx skills check
 ```
 
-Skills are discovered by searching for **`SKILL.md`** under each configured directory. A **symbolic link** in a skill root that points to a directory is treated like a normal subfolder when that directory contains **`SKILL.md`**.
+Global skills land in **`~/.agents/skills/`** — shared with any agent that reads that directory.
 
-### Root `.md` / `.mdc` in skill directories
+### skillsbd — Coddy-curated registry
 
-Optional markdown at the **root** of a **`skills.dirs`** entry (not under **`.cursor/rules/`**) may register as slash skills. **Project rules** belong under **`.coddy/rules/`**, **`.cursor/rules/`**, and the other trees in **[rules.md](rules.md)** - not in **`skills.dirs`**.
+**[https://neuraldeep.ru/skills](https://neuraldeep.ru/skills)** is the **skillsbd** registry, curated for Coddy specifically. Install its CLI:
 
-## Loading priority
-
-Directories are scanned in config order (see **`skills.dirs`** in [config.md](config.md)). Built-in defaults when **`dirs`** is empty:
-
-1. **`${CODDY_HOME}/skills/`** - installed skills (agent home)
-2. **`${CWD}/.skills/`** - project skills (session working directory)
-3. **`~/.cursor/skills/`**
-4. **`~/.claude/skills/`**
-
-Bundled **`/coddy-generate-rules`** is always prepended (writes **`.coddy/rules/*.mdc`** by default).
-
-## Slash commands catalog
-
-Every discovered skill has a canonical slash **`name`** (folder name for `subdir/SKILL.md`, file stem for root `*.md` / `*.mdc`). The agent builds one **`Skills`** template block:
-
-1. A Markdown catalog listing all commands with short descriptions (**`ListSkills`**).
-2. Full bodies for **`globs`** / **`alwaysApply`** matches (skills pipeline).
-3. On a user message, **`/name`** tokens preceded by line start or ASCII whitespace (and legacy **`[/name](coddy-skill:name)`** forms if present in stored text) append the matching skill body for that turn when the name is **not** already in the glob-selected active set.
-
-ACP clients receive **`session/update`** **`available_commands_update`** after **`session/new`** and **`session/load`** (see **`examples/acp/acp_e2e_skills_slash.py`**).
-
-The **`coddy http`** SPA queries **`GET /coddy/slash-commands`** for autocomplete.
-
-## How skills are applied
-
-On **`session/prompt`**, the agent:
-
-1. Loads skills from **`skills.dirs`** for the session **cwd** and **`CODDY_HOME`**
-2. Applies glob / **`alwaysApply`** filtering for the skills section
-3. Merges slash catalog plus invoked **`/name`** bodies into **`{{.Skills}}`**
-
-Rules from **`internal/rules`** are merged separately into **`{{.Rules}}`**.
-
-## Example skill file
-
-`~/.cursor/skills/code-review/SKILL.md`:
-
-```markdown
-# Code Review Skill
-
-Provides guidance for conducting thorough code reviews.
-
-## Instructions
-
-When asked to review code:
-1. Check for security vulnerabilities
-2. Verify error handling is complete
-3. Look for performance issues
-4. Check test coverage
-5. Verify documentation is adequate
+```bash
+npm install -g skillsbd
 ```
 
-## Adding custom skills at runtime
+Key commands:
 
-Configure extra directories in **`config.yaml`**:
+```bash
+# Search the registry
+npx skillsbd search [query]
+
+# Install a skill
+npx skillsbd install <name>
+
+# List installed skills
+npx skillsbd list
+```
+
+Skills from skillsbd are also installed into **`~/.agents/skills/`** by default, so Coddy picks them up automatically via the default `skills.dirs`.
+
+You can also browse and install through the Coddy web UI: **Settings → Skills → Registry**.
+
+---
+
+## Directory layout
+
+Coddy searches all directories in `skills.dirs` and deduplicates by skill name. **Later directories have higher priority** — if the same skill name appears in multiple directories, the version from the directory listed last wins.
+
+Default directories (lowest → highest priority):
+
+| Priority | Path | Purpose |
+|----------|------|---------|
+| lowest | `~/.agents/skills/` | Global skills installed by `npx skills` / `npx skillsbd` — shared with all agents |
+| ↑ | `~/.coddy/skills/` | Coddy-specific skills; may contain symlinks into `~/.agents/skills/` |
+| highest | `${CWD}/.coddy/skills/` | Project-local skills — override anything from global/user directories |
+
+Override in `config.yaml`:
 
 ```yaml
 skills:
   dirs:
-    - "~/my-custom-skills"
-    - "/shared/team-skills"
+    - "~/.agents/skills"
+    - "${CODDY_HOME}/skills"
+    - "${CWD}/.coddy/skills"
+    - "~/my-team-skills"
 ```
 
-Or install into **`skills.install_dir`** via CLI:
+`${CODDY_HOME}` and `${CWD}` expand at runtime (per-session cwd for `${CWD}`).
 
-- **`coddy skills list`**
-- **`coddy skills install <path-or-url>`**
-- **`coddy skills uninstall <name>`**
+---
+
+## Supported file formats
+
+### `subdir/SKILL.md` (recommended)
+
+One skill per directory. Compatible with the Cursor skills layout and `npx skills`:
+
+```
+~/.agents/skills/
+  code-review/
+    SKILL.md
+  docker-helper/
+    SKILL.md
+```
+
+### Root `.md` / `.mdc` in a skill directory
+
+Flat files at the root of a `skills.dirs` entry also register as skills (stem becomes the slash name).
+
+### YAML frontmatter
+
+Optional frontmatter controls when the skill is injected:
+
+```markdown
+---
+name: code-review          # optional override; defaults to directory/file name
+description: One-line summary shown in the slash-command catalog and UI.
+alwaysApply: false         # true = always prepend to system prompt
+globs:
+  - "**/*.go"              # inject when any open file matches
+---
+
+# Code Review
+
+Full skill body here...
+```
+
+---
+
+## Enable / disable without uninstalling
+
+```bash
+coddy skills list              # show all skills with enabled/disabled status
+coddy skills disable <name>    # skip a skill without removing it
+coddy skills enable <name>     # re-enable
+```
+
+Disabled state is stored in `~/.coddy/skills/.disabled` (plain text, one name per line).
+
+---
+
+## Writing your own skill
+
+Create a directory anywhere and add `SKILL.md`:
+
+```markdown
+---
+name: my-skill
+description: Short description shown in the catalog.
+alwaysApply: false
+---
+
+# My Skill
+
+Instructions the agent will follow when this skill is active...
+```
+
+Then add the parent directory to `skills.dirs` in `config.yaml`, or drop the directory into `~/.coddy/skills/` or `${CWD}/.coddy/skills/`.
+
+To share it with others, publish to GitHub and list it on [skills.sh](https://skills.sh) or submit to [neuraldeep.ru/skills](https://neuraldeep.ru/skills).
+
+---
+
+## How skills are applied
+
+On each `session/prompt` the agent:
+
+1. Scans `skills.dirs` for the session cwd and `CODDY_HOME`.
+2. Filters skills: `alwaysApply: true` and glob matches are included in the system prompt unconditionally; others are available as slash commands.
+3. Builds the **`{{.Skills}}`** template block (catalog + active bodies).
+4. Merges invoked `/name` tokens from the user message into the active set for that turn.
+
+ACP clients receive `available_commands_update` after `session/new` and `session/load`. The HTTP UI queries `GET /coddy/slash-commands` for autocomplete.
+
+---
 
 ## References
 
-- Implementation: **`internal/skills/*`**, wiring in **`internal/session`**, **`internal/agent/system_prompt.go`**
+- Implementation: `internal/skills/`, wiring in `internal/session/`, `internal/agent/system_prompt.go`
+- Config reference: [config.md](config.md) → `skills`
+- Rules (separate mechanism): [rules.md](rules.md)
+- Registry UI: Settings → Skills (requires `coddy http`)

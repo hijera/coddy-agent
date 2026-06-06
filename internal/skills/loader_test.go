@@ -263,3 +263,42 @@ func TestLoadFromNonexistentDir(t *testing.T) {
 		t.Errorf("expected no user skills for nonexistent dir, got %d", len(loaded))
 	}
 }
+
+func TestLaterDirOverridesSameName(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+
+	// Same skill name in two directories.
+	skill1 := filepath.Join(dir1, "my-skill")
+	if err := os.MkdirAll(skill1, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skill1, "SKILL.md"), []byte("---\ndescription: from dir1\n---\n\nBody1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	skill2 := filepath.Join(dir2, "my-skill")
+	if err := os.MkdirAll(skill2, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skill2, "SKILL.md"), []byte("---\ndescription: from dir2\n---\n\nBody2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	loader := skills.NewLoader([]string{dir1, dir2})
+	loaded, err := loader.LoadAll("/tmp", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded = withoutBundled(loaded)
+
+	if len(loaded) != 1 {
+		t.Fatalf("expected 1 skill after dedup, got %d", len(loaded))
+	}
+	if loaded[0].Description != "from dir2" {
+		t.Errorf("expected dir2 to win, got description %q", loaded[0].Description)
+	}
+	if !strings.Contains(loaded[0].Content, "Body2") {
+		t.Errorf("expected dir2 content, got %q", loaded[0].Content)
+	}
+}

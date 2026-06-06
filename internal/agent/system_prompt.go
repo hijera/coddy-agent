@@ -7,6 +7,7 @@ import (
 	"github.com/EvilFreelancer/coddy-agent/internal/acp"
 	"github.com/EvilFreelancer/coddy-agent/internal/llm"
 	"github.com/EvilFreelancer/coddy-agent/internal/prompts"
+	"github.com/EvilFreelancer/coddy-agent/internal/session"
 	"github.com/EvilFreelancer/coddy-agent/internal/skills"
 	"github.com/EvilFreelancer/coddy-agent/internal/tools"
 	"github.com/EvilFreelancer/coddy-agent/internal/tools/todo"
@@ -80,6 +81,7 @@ func (a *Agent) buildSystemPrompt(mode string, activeSkills []*skills.Skill, too
 	if rs, ok := a.state.(rulesState); ok {
 		rulesMD = buildRulesPromptMarkdown(rs, contextFiles, userText)
 	}
+	instructionsMD := session.LoadInstructions(a.state.GetCWD(), a.cfg.Instructions.Files)
 	full := prompts.RenderWithFallback(mode, promptsDir, a.cfg.Prompts.AgentFile(), a.cfg.Prompts.PlanFile(), prompts.TemplateData{
 		CWD:            a.state.GetCWD(),
 		Skills:         skillsMD,
@@ -89,6 +91,7 @@ func (a *Agent) buildSystemPrompt(mode string, activeSkills []*skills.Skill, too
 		TodoList:       promptTodoMD,
 		PlanContext:    planCtx,
 		DiscardedPlans: discardedPlans,
+		Instructions:   instructionsMD,
 		UTCNow:         time.Now().UTC().Format(time.RFC3339),
 	})
 	if rs, ok := a.state.(rulesState); ok {

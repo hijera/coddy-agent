@@ -46,35 +46,62 @@ func NewLoader(dirs []string) *Loader {
 
 // LoadAll discovers and loads all skills from configured directories.
 // cwd is the session working directory (${CWD}). agentHome is CODDY_HOME (${CODDY_HOME}).
-func (l *Loader) LoadAll(cwd, agentHome string) ([]*Skill, error) {
-	var skills []*Skill
-	seen := make(map[string]bool)
-
-	for _, s := range Bundled() {
-		if s == nil || seen[s.FilePath] {
-			continue
-		}
-		seen[s.FilePath] = true
-		skills = append(skills, s)
+// installDir is used to read the .disabled file; empty string skips disable filtering.
+//
+// Directory priority: later entries in Dirs override earlier ones — a skill with the
+// same canonical name found in a later directory replaces the one from an earlier directory.
+// This means ${CWD}/.coddy/skills (last by default) has the highest priority.
+func (l *Loader) LoadAll(cwd, agentHome string, installDir ...string) ([]*Skill, error) {
+	var disabled map[string]struct{}
+	if len(installDir) > 0 && installDir[0] != "" {
+		disabled = ReadDisabled(installDir[0])
 	}
 
-	// Load from directories in order.
+	// ordered tracks insertion order of first encounter; byName points to the slot
+	// in ordered so a later directory can overwrite the skill for a given name.
+	type slot struct{ name string; skill *Skill }
+	var ordered []slot
+	byName := make(map[string]int) // canonical name → index in ordered
+	seenPath := make(map[string]bool)
+
+	addSkill := func(s *Skill) {
+		if s == nil || seenPath[s.FilePath] {
+			return
+		}
+		seenPath[s.FilePath] = true
+		name := CanonicalCommandName(s)
+		if idx, ok := byName[name]; ok {
+			ordered[idx].skill = s // later dir wins
+		} else {
+			byName[name] = len(ordered)
+			ordered = append(ordered, slot{name, s})
+		}
+	}
+
+	// Bundled skills are always prepended (lowest priority, never overridden).
+	for _, s := range Bundled() {
+		addSkill(s)
+	}
+
+	// Load from directories in config order; later dirs override earlier ones.
 	for _, dir := range l.Dirs {
 		expanded := expandPath(dir, cwd, agentHome)
 		found, err := loadFromDir(expanded)
 		if err != nil {
-			// Skip directories that don't exist.
 			continue
 		}
 		for _, s := range found {
-			if !seen[s.FilePath] {
-				seen[s.FilePath] = true
-				skills = append(skills, s)
-			}
+			addSkill(s)
 		}
 	}
 
-	return skills, nil
+	result := make([]*Skill, 0, len(ordered))
+	for _, sl := range ordered {
+		if !IsDisabled(disabled, sl.name) {
+			result = append(result, sl.skill)
+		}
+	}
+	return result, nil
 }
 
 // FilterForContext returns skills applicable to the given context files.

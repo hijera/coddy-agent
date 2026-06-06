@@ -312,12 +312,11 @@ func UISchemaMap() map[string]interface{} {
 				"dirs": map[string]interface{}{
 					"type":        "array",
 					"title":       "Skill directories",
-					"description": "Search paths for skill folders; ${CODDY_HOME} and ${CWD} expand at runtime.",
+					"description": "Search paths for skills. Defaults: ~/.agents/skills (global, shared with npx skills / npx skillsbd), ${CODDY_HOME}/skills (coddy-specific), ${CWD}/.coddy/skills (project-local). ${CODDY_HOME} and ${CWD} expand at runtime.",
 					"items":       map[string]interface{}{"type": "string"},
 				},
-				"install_dir": strProp("Install directory", "Where `coddy skills install` stores downloaded packs."),
 			},
-			[]string{"dirs", "install_dir"},
+			[]string{"dirs"},
 			nil),
 		"memory": objectSchema("Long-term memory", "Optional memory copilot (requires memory build tag and provider).",
 			map[string]interface{}{
@@ -348,6 +347,17 @@ func UISchemaMap() map[string]interface{} {
 				"plan_prompt":  strProp("Plan prompt file", "Filename for plan-mode system prompt."),
 			},
 			[]string{"dir", "agent_prompt", "plan_prompt"},
+			nil),
+		"instructions": objectSchema("Instructions", "Files read from the session working directory and appended to the system prompt as project instructions (AGENTS.md-compatible).",
+			map[string]interface{}{
+				"files": map[string]interface{}{
+					"type":        "array",
+					"title":       "Instruction files",
+					"description": "Filenames relative to session CWD to read as instructions. Defaults to [\"AGENTS.md\"].",
+					"items":       map[string]interface{}{"type": "string"},
+				},
+			},
+			[]string{"files"},
 			nil),
 		"logger": objectSchema("Logger", "Process log level, outputs, and rotation.",
 			map[string]interface{}{
@@ -393,7 +403,7 @@ func UISchemaMap() map[string]interface{} {
 
 	rootOrder := []string{
 		"providers", "models", "agent", "tools", "mcp_servers", "skills", "memory", "scheduler",
-		"prompts", "logger", "sessions",
+		"prompts", "instructions", "logger", "sessions",
 	}
 
 	doc := map[string]interface{}{

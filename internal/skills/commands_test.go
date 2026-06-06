@@ -12,9 +12,10 @@ import (
 func TestUninstallRemovesSkillDir(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := &config.Config{}
-	cfg.Skills.InstallDir = tmp
+	cfg.Paths.Home = tmp
 
-	skillDir := filepath.Join(tmp, "my-skill")
+	managedDir := cfg.Skills.ManagedDir(tmp)
+	skillDir := filepath.Join(managedDir, "my-skill")
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +34,7 @@ func TestUninstallRemovesSkillDir(t *testing.T) {
 func TestUninstallNotFound(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := &config.Config{}
-	cfg.Skills.InstallDir = tmp
+	cfg.Paths.Home = tmp
 
 	err := skills.Uninstall(cfg, "missing")
 	if err == nil {
@@ -44,7 +45,7 @@ func TestUninstallNotFound(t *testing.T) {
 func TestUninstallRejectsPathLikeName(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := &config.Config{}
-	cfg.Skills.InstallDir = tmp
+	cfg.Paths.Home = tmp
 
 	for _, name := range []string{"a/b", "../x", "", "  "} {
 		t.Run(name, func(t *testing.T) {

@@ -28,14 +28,15 @@ func SchemaExampleConfigJSON() *ConfigJSON {
 			AgentPrompt: "agent.md",
 			PlanPrompt:  "plan.md",
 		},
+		Instructions: InstructionsJSON{
+			Files: []string{"AGENTS.md"},
+		},
 		Skills: SkillsJSON{
 			Dirs: []string{
+				"~/.agents/skills",
 				"${CODDY_HOME}/skills",
-				"${CWD}/.skills",
-				"~/.cursor/skills",
-				"~/.claude/skills",
+				"${CWD}/.coddy/skills",
 			},
-			InstallDir: "${CODDY_HOME}/skills",
 		},
 		MCPServers: []MCPServerJSON{},
 		Tools: ToolsJSON{

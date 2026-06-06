@@ -72,10 +72,6 @@ prompts:
   # plan_prompt: "plan.md"
 
 skills:
-  # install_dir is used by coddy skills install / coddy skills uninstall.
-  # Default: $CODDY_HOME/skills (typically ~/.coddy/skills)
-  install_dir: ""
-
   # dirs is the list of directories scanned for skills and rules.
   # Searched in order. When empty, defaults are
   # ${CODDY_HOME}/skills, ${CWD}/.skills, ~/.cursor/skills, ~/.claude/skills
@@ -116,9 +112,6 @@ tools:
     - "git status"
     - "git diff"
     - "git log"
-
-  # When non-empty, all tool permission prompts are auto-approved (ACP and HTTP). Dangerous; use only in trusted environments.
-  # permission_master_key: "${CODDY_PERMISSION_MASTER_KEY}"
 
 # OpenAI-compatible HTTP API (only when built with: go build -tags=http). Embedded SPA from GET / adds -tags=ui with http. See docs/http-api.md
 # httpserver:

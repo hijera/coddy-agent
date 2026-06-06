@@ -203,7 +203,7 @@ func TestLoadFromCLIWhenConfigMissing_AppliesDefaults(t *testing.T) {
 	if cfg.Logger.Level != config.LogLevelInfo {
 		t.Fatalf("logger default level: %q", cfg.Logger.Level)
 	}
-	if len(cfg.Skills.Dirs) != 4 {
+	if len(cfg.Skills.Dirs) != 3 {
 		t.Fatalf("skills default dirs: len=%d", len(cfg.Skills.Dirs))
 	}
 	if cfg.Sessions.Dir != "" {

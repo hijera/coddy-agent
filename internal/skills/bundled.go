@@ -31,9 +31,10 @@ func parseSkillBytes(path string, data []byte) (*Skill, error) {
 	body, fm := parseFrontmatter(data)
 	skill.Content = strings.TrimSpace(body)
 	if fm != nil {
+		if fm.Name != "" {
+			skill.Name = fm.Name
+		}
 		skill.Description = fm.Description
-		skill.Globs = fm.Globs
-		skill.AlwaysApply = fm.AlwaysApply
 	}
 	return skill, nil
 }

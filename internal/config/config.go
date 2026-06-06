@@ -79,6 +79,9 @@ func validateSubconfigs(cfg *Config) error {
 	if err := cfg.Prompts.Validate(); err != nil {
 		return fmt.Errorf("prompts: %w", err)
 	}
+	if err := cfg.Instructions.Validate(); err != nil {
+		return fmt.Errorf("instructions: %w", err)
+	}
 	if err := cfg.Agent.Validate(); err != nil {
 		return fmt.Errorf("agent: %w", err)
 	}
@@ -118,6 +121,7 @@ func applyDefaults(cfg *Config) {
 	p := cfg.Paths
 
 	cfg.Agent.ApplyDefaults()
+	cfg.Instructions.ApplyDefaults()
 	if cfg.Logger.Level == "" {
 		cfg.Logger.Level = LogLevelInfo
 	}

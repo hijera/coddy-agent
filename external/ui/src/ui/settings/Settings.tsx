@@ -62,6 +62,8 @@ export function Settings(props: {
   onClose: () => void;
   appearanceOpen: boolean;
   onToggleAppearance: () => void;
+  skillsOpen: boolean;
+  onToggleSkills: () => void;
 }) {
   const [schema, setSchema] = useState<JsonSchema | null>(null);
   const [doc, setDoc] = useState<Record<string, unknown>>({});
@@ -157,8 +159,17 @@ export function Settings(props: {
           aria-pressed={props.appearanceOpen}
           onClick={props.onToggleAppearance}
         >
-          <span className="settings-appearance-swatch-dot" aria-hidden />
           <span className="settings-appearance-row-label">Appearance</span>
+          <span className="settings-appearance-row-arrow" aria-hidden>›</span>
+        </button>
+        <button
+          type="button"
+          className={`settings-appearance-row${props.skillsOpen ? " active" : ""}`}
+          data-testid="settings-skills-open"
+          aria-pressed={props.skillsOpen}
+          onClick={props.onToggleSkills}
+        >
+          <span className="settings-appearance-row-label">Skills</span>
           <span className="settings-appearance-row-arrow" aria-hidden>›</span>
         </button>
         <p className="settings-lead">

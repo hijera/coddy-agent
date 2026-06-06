@@ -60,6 +60,12 @@ Structure your plans as markdown with:
 {{.Rules}}
 
 {{end}}
+{{if .Instructions}}
+## Project instructions
+
+{{.Instructions}}
+
+{{end}}
 {{if .Memory}}
 ## Session memory
 

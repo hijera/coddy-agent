@@ -9,18 +9,24 @@ import (
 
 // ConfigJSON is the JSON shape for GET/PUT /coddy/config (snake_case keys match YAML).
 type ConfigJSON struct {
-	Providers  []ProviderJSON  `json:"providers,omitempty"`
-	Models     []ModelJSON     `json:"models,omitempty"`
-	Agent      AgentJSON       `json:"agent,omitempty"`
-	Prompts    PromptsJSON     `json:"prompts,omitempty"`
-	Skills     SkillsJSON      `json:"skills,omitempty"`
-	MCPServers []MCPServerJSON `json:"mcp_servers,omitempty"`
-	Tools      ToolsJSON       `json:"tools,omitempty"`
-	Logger     LoggerJSON      `json:"logger,omitempty"`
-	Sessions   SessionsJSON    `json:"sessions,omitempty"`
-	Memory     MemoryJSON      `json:"memory,omitempty"`
-	HTTPServer HTTPServerJSON  `json:"httpserver,omitempty"`
-	Scheduler  SchedulerJSON   `json:"scheduler,omitempty"`
+	Providers    []ProviderJSON  `json:"providers,omitempty"`
+	Models       []ModelJSON     `json:"models,omitempty"`
+	Agent        AgentJSON       `json:"agent,omitempty"`
+	Prompts      PromptsJSON     `json:"prompts,omitempty"`
+	Instructions InstructionsJSON `json:"instructions,omitempty"`
+	Skills       SkillsJSON      `json:"skills,omitempty"`
+	MCPServers   []MCPServerJSON `json:"mcp_servers,omitempty"`
+	Tools        ToolsJSON       `json:"tools,omitempty"`
+	Logger       LoggerJSON      `json:"logger,omitempty"`
+	Sessions     SessionsJSON    `json:"sessions,omitempty"`
+	Memory       MemoryJSON      `json:"memory,omitempty"`
+	HTTPServer   HTTPServerJSON  `json:"httpserver,omitempty"`
+	Scheduler    SchedulerJSON   `json:"scheduler,omitempty"`
+}
+
+// InstructionsJSON mirrors Instructions for JSON APIs.
+type InstructionsJSON struct {
+	Files []string `json:"files,omitempty"`
 }
 
 // ProviderJSON mirrors ProviderConfig for JSON APIs.
@@ -59,8 +65,7 @@ type PromptsJSON struct {
 
 // SkillsJSON mirrors Skills for JSON APIs.
 type SkillsJSON struct {
-	Dirs       []string `json:"dirs,omitempty"`
-	InstallDir string   `json:"install_dir,omitempty"`
+	Dirs []string `json:"dirs,omitempty"`
 }
 
 // MCPServerJSON mirrors MCPServerConfig for JSON APIs.
@@ -161,7 +166,8 @@ func ConfigToJSONDTO(c *Config) *ConfigJSON {
 	out.Prompts = PromptsJSON{
 		Dir: c.Prompts.Dir, AgentPrompt: c.Prompts.AgentPrompt, PlanPrompt: c.Prompts.PlanPrompt,
 	}
-	out.Skills = SkillsJSON{Dirs: append([]string(nil), c.Skills.Dirs...), InstallDir: c.Skills.InstallDir}
+	out.Instructions = InstructionsJSON{Files: append([]string(nil), c.Instructions.Files...)}
+	out.Skills = SkillsJSON{Dirs: append([]string(nil), c.Skills.Dirs...)}
 	for _, s := range c.MCPServers {
 		mj := MCPServerJSON{Type: s.Type, Name: s.Name, Command: s.Command, Args: append([]string(nil), s.Args...), URL: s.URL}
 		for _, e := range s.Env {
@@ -218,8 +224,9 @@ func JSONDTOToConfig(j *ConfigJSON, paths Paths) *Config {
 	cfg.Prompts = Prompts{
 		Dir: j.Prompts.Dir, AgentPrompt: j.Prompts.AgentPrompt, PlanPrompt: j.Prompts.PlanPrompt,
 	}
+	cfg.Instructions = Instructions{Files: append([]string(nil), j.Instructions.Files...)}
 	cfg.Skills = Skills{
-		Dirs: append([]string(nil), j.Skills.Dirs...), InstallDir: j.Skills.InstallDir,
+		Dirs: append([]string(nil), j.Skills.Dirs...),
 	}
 	for _, s := range j.MCPServers {
 		mc := MCPServerConfig{Type: s.Type, Name: s.Name, Command: s.Command, Args: append([]string(nil), s.Args...), URL: s.URL}

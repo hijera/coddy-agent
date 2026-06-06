@@ -111,14 +111,18 @@ memory:
 
 # Skills directories (Go: config.Skills, internal/config/skills.go)
 skills:
-  # Directories to search for SKILL.md and optional root .md/.mdc skill files
-  # Searched in order. When omitted, defaults are
-  # ${CODDY_HOME}/skills, ${CWD}/.skills, ~/.cursor/skills, ~/.claude/skills
+  # Directories to search for SKILL.md and optional root .md/.mdc skill files.
+  # Later entries have HIGHER priority: if the same skill name appears in multiple
+  # directories, the version from the last matching directory wins.
+  # Default dirs (lowest → highest priority):
+  #   ~/.agents/skills          - global skills, shared with npx skills / npx skillsbd
+  #   ${CODDY_HOME}/skills      - coddy-specific; may contain symlinks to ~/.agents/skills
+  #   ${CWD}/.coddy/skills      - project-local; overrides everything above
+  # ${CODDY_HOME} and ${CWD} expand at runtime (per-session cwd for ${CWD}).
   dirs:
+    - "~/.agents/skills"
     - "${CODDY_HOME}/skills"
-    - "${CWD}/.skills"
-    - "~/.cursor/skills"
-    - "~/.claude/skills"
+    - "${CWD}/.coddy/skills"
 
 # Project rules (Go: config.Rules, internal/config/rules.go)
 # Discovered from .coddy/rules, .cursor/rules, .claude/rules, .codex/rules under session CWD.

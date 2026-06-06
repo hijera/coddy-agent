@@ -7,6 +7,7 @@ import (
 	"github.com/EvilFreelancer/coddy-agent/internal/acp"
 	"github.com/EvilFreelancer/coddy-agent/internal/llm"
 	"github.com/EvilFreelancer/coddy-agent/internal/prompts"
+	"github.com/EvilFreelancer/coddy-agent/internal/session"
 	"github.com/EvilFreelancer/coddy-agent/internal/skills"
 	"github.com/EvilFreelancer/coddy-agent/internal/tools"
 	"github.com/EvilFreelancer/coddy-agent/internal/tools/todo"
@@ -22,28 +23,20 @@ func joinNonEmptyPromptBlocks(parts ...string) string {
 	return strings.Join(b, "\n\n")
 }
 
-// buildSkillsPromptMarkdown merges slash catalog, active globs-linked skill bodies, and ephemeral /name invokes.
-func buildSkillsPromptMarkdown(allLoaded []*skills.Skill, active []*skills.Skill, userText string) string {
+// buildSkillsPromptMarkdown merges the slash catalog and bodies of context-matched non-command skills.
+// Slash-command bodies (invoked via /name) are NOT included here — they are injected directly into
+// the user message by buildMessages so the LLM sees them close to the user's request.
+func buildSkillsPromptMarkdown(allLoaded []*skills.Skill, active []*skills.Skill) string {
 	activeDedup := skills.DedupeSkillsByCanonicalName(active)
-	activeGlobCanon := make(map[string]struct{})
-	for _, sk := range activeDedup {
-		n := skills.CanonicalCommandName(sk)
-		if n != "" {
-			activeGlobCanon[n] = struct{}{}
-		}
-	}
-	var filteredInvoke []string
-	for _, n := range skills.ParseInvokedCommandNames(userText) {
-		if _, ok := activeGlobCanon[n]; ok {
-			continue
-		}
-		filteredInvoke = append(filteredInvoke, n)
-	}
 	skillSums := skills.ListSkills(allLoaded)
 	catalogNameSet := make(map[string]struct{}, len(skillSums))
 	for _, s := range skillSums {
 		catalogNameSet[s.Name] = struct{}{}
 	}
+
+	// Active section: skill bodies for context-matched skills that are NOT slash commands.
+	// Slash commands are listed in the catalog only; their bodies are injected into the user
+	// message on explicit invocation so the LLM sees them as close to the request as possible.
 	var activeForSection []*skills.Skill
 	for _, sk := range activeDedup {
 		n := skills.CanonicalCommandName(sk)
@@ -54,10 +47,10 @@ func buildSkillsPromptMarkdown(allLoaded []*skills.Skill, active []*skills.Skill
 		}
 		activeForSection = append(activeForSection, sk)
 	}
+
 	catalog := skills.BuildSlashCatalogMarkdown(skillSums)
 	section := skills.BuildSystemPromptSection(activeForSection)
-	ephemeral := skills.BuildInvokedSkillsSection(allLoaded, filteredInvoke)
-	return joinNonEmptyPromptBlocks(catalog, section, ephemeral)
+	return joinNonEmptyPromptBlocks(catalog, section)
 }
 
 // buildSystemPrompt constructs the system prompt for the current mode and skills.
@@ -74,12 +67,13 @@ func (a *Agent) buildSystemPrompt(mode string, activeSkills []*skills.Skill, too
 	if mode == "plan" {
 		discardedPlans = discardedPlansPromptBlock(a.state.DiscardedPlanSlugs())
 	}
-	skillsMD := buildSkillsPromptMarkdown(a.state.GetSkills(), activeSkills, userText)
+	skillsMD := buildSkillsPromptMarkdown(a.state.GetSkills(), activeSkills)
 	toolsMD := tools.FormatDefinitionsForPrompt(toolDefs)
 	rulesMD := ""
 	if rs, ok := a.state.(rulesState); ok {
 		rulesMD = buildRulesPromptMarkdown(rs, contextFiles, userText)
 	}
+	instructionsMD := session.LoadInstructions(a.state.GetCWD(), a.cfg.Instructions.Files)
 	full := prompts.RenderWithFallback(mode, promptsDir, a.cfg.Prompts.AgentFile(), a.cfg.Prompts.PlanFile(), prompts.TemplateData{
 		CWD:            a.state.GetCWD(),
 		Skills:         skillsMD,
@@ -89,6 +83,7 @@ func (a *Agent) buildSystemPrompt(mode string, activeSkills []*skills.Skill, too
 		TodoList:       promptTodoMD,
 		PlanContext:    planCtx,
 		DiscardedPlans: discardedPlans,
+		Instructions:   instructionsMD,
 		UTCNow:         time.Now().UTC().Format(time.RFC3339),
 	})
 	if rs, ok := a.state.(rulesState); ok {

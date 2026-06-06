@@ -52,7 +52,7 @@ func (s *Server) listSkillSummariesCached(cwdAbs string) ([]skills.SkillSummary,
 	s.slashMu.Unlock()
 
 	loader := skills.NewLoader(s.activeCfg().Skills.Dirs)
-	loaded, err := loader.LoadAll(cleanCWD, s.activeCfg().Paths.Home)
+	loaded, err := loader.LoadAll(cleanCWD, s.activeCfg().Paths.Home, s.activeCfg().Skills.ManagedDir(s.activeCfg().Paths.Home))
 	if err != nil {
 		return nil, err
 	}

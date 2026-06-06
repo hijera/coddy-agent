@@ -111,6 +111,7 @@ import { SchedulerJobsDrawer } from "./scheduler/SchedulerJobsDrawer";
 import type { SchedulerInfo, SchedulerJob } from "./scheduler/types";
 import { Settings } from "./settings/Settings";
 import { AppearanceSheet } from "./theme/AppearanceModal";
+import { SkillsPanel } from "./skills/SkillsPanel";
 
 const HDR = "X-Coddy-Session-ID";
 
@@ -776,6 +777,7 @@ export function App() {
   const [schedulerOpen, setSchedulerOpen] = useState(false);
   const [settingsRoute, setSettingsRoute] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [skillsPanelOpen, setSkillsPanelOpen] = useState(false);
   const [schedulerEditor, setSchedulerEditor] =
     useState<SchedulerEditorState>(null);
   const [schedulerJobs, setSchedulerJobs] = useState<SchedulerJob[]>([]);
@@ -2980,8 +2982,22 @@ export function App() {
         setSettingsHash();
         return false;
       }
+      setSkillsPanelOpen(false);
       setSettingsAppearanceHash();
       return true;
+    });
+  }, []);
+
+  const onCloseSkillsPanel = useCallback(() => {
+    setSkillsPanelOpen(false);
+  }, []);
+
+  const onToggleSkillsPanel = useCallback(() => {
+    setSkillsPanelOpen((prev) => {
+      if (!prev) {
+        setAppearanceOpen(false);
+      }
+      return !prev;
     });
   }, []);
 
@@ -3183,6 +3199,7 @@ export function App() {
             className={[
               "settings-dock-cluster",
               appearanceOpen ? "settings-dock-cluster-appearance-active" : "",
+              skillsPanelOpen ? "settings-dock-cluster-skills-active" : "",
             ]
               .filter(Boolean)
               .join(" ")}
@@ -3191,9 +3208,14 @@ export function App() {
               onClose={onCloseSettings}
               appearanceOpen={appearanceOpen}
               onToggleAppearance={onToggleAppearance}
+              skillsOpen={skillsPanelOpen}
+              onToggleSkills={onToggleSkillsPanel}
             />
             {appearanceOpen ? (
               <AppearanceSheet onClose={onCloseAppearance} />
+            ) : null}
+            {skillsPanelOpen ? (
+              <SkillsPanel onClose={onCloseSkillsPanel} />
             ) : null}
           </div>
         ) : null}

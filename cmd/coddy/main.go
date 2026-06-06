@@ -119,8 +119,8 @@ func printUsage(w *os.File) {
   %[1]s gateway [flags] (messenger gateway: Telegram etc.)
   %[1]s sessions list [flags]
   %[1]s skills list
-  %[1]s skills install <path-or-github-or-url>
-  %[1]s skills uninstall <name>
+  %[1]s skills enable <name>
+  %[1]s skills disable <name>
   %[1]s rules list [--cwd DIR]
   %[1]s update [flags]
 `, os.Args[0])
@@ -297,7 +297,7 @@ func runSessions(args []string) error {
 
 func runSkills(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: %s skills list, install, or uninstall", os.Args[0])
+		return fmt.Errorf("usage: %s skills list|enable|disable", os.Args[0])
 	}
 	cfg, err := config.LoadFromCLI(config.CLIPaths{})
 	if err != nil {
@@ -306,16 +306,24 @@ func runSkills(args []string) error {
 	switch args[0] {
 	case "list":
 		return skills.List(cfg)
-	case "install":
+	case "enable":
 		if len(args) < 2 {
-			return fmt.Errorf("usage: %s skills install <path-or-github-or-url>", os.Args[0])
+			return fmt.Errorf("usage: %s skills enable <name>", os.Args[0])
 		}
-		return skills.Install(cfg, args[1])
-	case "uninstall":
+		if err := skills.Enable(cfg, args[1]); err != nil {
+			return err
+		}
+		fmt.Printf("Enabled skill %q\n", args[1])
+		return nil
+	case "disable":
 		if len(args) < 2 {
-			return fmt.Errorf("usage: %s skills uninstall <name>", os.Args[0])
+			return fmt.Errorf("usage: %s skills disable <name>", os.Args[0])
 		}
-		return skills.Uninstall(cfg, args[1])
+		if err := skills.Disable(cfg, args[1]); err != nil {
+			return err
+		}
+		fmt.Printf("Disabled skill %q\n", args[1])
+		return nil
 	default:
 		return fmt.Errorf("unknown skills subcommand %q", args[0])
 	}

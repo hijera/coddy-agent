@@ -1,7 +1,7 @@
 ---
 description: Main internal packages at a glance
-globs: internal/**/*.go
-alwaysApply: false
+paths:
+  - "internal/**/*.go"
 ---
 
 # Core modules (sketch)
@@ -17,4 +17,4 @@ Prefer extending these over growing **`cmd/`** or duplicating logic in **`extern
 
 ## References
 
-@architecture.mdc
+@architecture.md

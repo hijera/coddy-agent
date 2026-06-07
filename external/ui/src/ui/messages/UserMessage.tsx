@@ -88,7 +88,7 @@ export function UserMessage(props: {
       </div>
       <div className="msg-user-foot">
         <MessageCopyIconButton
-          textToCopy={props.content}
+          textToCopy={display}
           tooltip="Copy message"
           ariaLabel="Copy message"
           dataTestId="user-message-copy"

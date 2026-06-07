@@ -88,6 +88,7 @@ import {
 import { isRedundantSessionPick } from "./sessions/pickSessionGuard";
 import { startSuggestSessionTitle } from "./sessionTitleSuggest";
 import { extractAtFileAttachments } from "./skills/draftAt";
+import { parseSessionAssetFiles } from "./skills/stripCoddyAttachments";
 import {
   migrateWorkspaceAtRecents,
   recordWorkspaceAtRecent,
@@ -1698,11 +1699,14 @@ export function App() {
         thinkingInTurn = 0;
         assistantInTurn = 0;
         const cat = readMessageCreatedAtUTC(m as Record<string, unknown>);
+        const rawContent = m.content || "";
+        const parsedAssets = parseSessionAssetFiles(rawContent);
         next.push({
           id: stableUserItemId(userTurnIdx),
           type: "user_message",
-          content: m.content || "",
+          content: rawContent,
           ...(cat ? { createdAtUtc: cat } : {}),
+          ...(parsedAssets.length > 0 ? { files: parsedAssets } : {}),
         });
         const mt = memByTurn.get(userTurnIdx);
         if (mt) {

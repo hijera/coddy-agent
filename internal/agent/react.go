@@ -88,9 +88,13 @@ func (a *Agent) Run(ctx context.Context, prompt []acp.ContentBlock) (string, err
 	a.state.ClearMemoryCopilotBlock()
 	userText := contentBlocksToText(prompt)
 	imageParts := a.state.TakePendingImageParts()
+	messageContent := userText
+	if note := filePathsNote(imageParts); note != "" {
+		messageContent = userText + "\n\n" + note
+	}
 	a.state.AddMessage(llm.Message{
 		Role:       llm.RoleUser,
-		Content:    userText,
+		Content:    messageContent,
 		ImageParts: imageParts,
 		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
 	})
@@ -805,4 +809,34 @@ func sessionStatePtr(s SessionState) *session.State {
 		return nil
 	}
 	return st
+}
+
+// filePathsNote builds an XML annotation listing the on-disk paths where
+// uploaded files were saved.  Returns an empty string when no part has a
+// FilePath set (e.g. sessions without a persistent directory).
+// The tag is stripped from the user-visible bubble by the SPA's
+// stripCoddyAttachmentsForUserDisplay function.
+func filePathsNote(parts []llm.ImagePart) string {
+	var lines []string
+	for _, p := range parts {
+		if p.FilePath == "" {
+			continue
+		}
+		line := "- " + p.FilePath
+		if p.Name != "" && p.Name != filepath.Base(p.FilePath) {
+			line += " (" + p.Name + ")"
+		}
+		lines = append(lines, line)
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("<coddy_session_assets>Uploaded files saved to session assets (read-only). You can read or copy them:\n")
+	for _, l := range lines {
+		b.WriteString(l)
+		b.WriteByte('\n')
+	}
+	b.WriteString("</coddy_session_assets>")
+	return b.String()
 }

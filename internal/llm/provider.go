@@ -22,6 +22,10 @@ type ImagePart struct {
 	DataURL string `json:"data_url"`
 	// Name is the original file name (informational; not sent to the provider).
 	Name string `json:"name,omitempty"`
+	// FilePath is the absolute path where this file was saved on disk (session assets/).
+	// When set the agent informs the model of this location so it can reference the file
+	// directly without re-reading the base64 payload.
+	FilePath string `json:"file_path,omitempty"`
 }
 
 // Message is a single turn in a conversation.

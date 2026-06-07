@@ -541,6 +541,9 @@ func (m *Manager) HandleSessionPromptWithSender(ctx context.Context, params acp.
 		for i, p := range params.ImageParts {
 			parts[i] = llm.ImagePart{DataURL: p.DataURL, Name: p.Name}
 		}
+		if err := SavePartsToAssets(parts, sessionDir); err != nil {
+			m.log.Warn("save uploaded files to assets", "error", err)
+		}
 		state.SetPendingImageParts(parts)
 	}
 

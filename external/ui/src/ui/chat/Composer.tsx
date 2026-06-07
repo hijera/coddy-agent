@@ -95,6 +95,8 @@ export function Composer(props: {
   onLlmModelChange?: (modelId: string) => void;
   /** Whether the currently selected model accepts image/file inputs. */
   llmModelMultimodal?: boolean;
+  /** Files carried over from the message being edited — shown as read-only chips. */
+  editingFiles?: { name: string; mimeType: string }[];
   /** Pristine home (no session). Ring stays empty; tooltip does not imply usage. */
   contextIdle?: boolean;
   tokenUsage?: TokenUsage | null;
@@ -1032,8 +1034,17 @@ export function Composer(props: {
           Message
         </label>
         <div className="composer-card" ref={composerCardRef}>
-          {attachedFiles.length > 0 ? (
+          {(props.editingFiles && props.editingFiles.length > 0) || attachedFiles.length > 0 ? (
             <div className="composer-attachments" aria-label="Attached files">
+              {(props.editingFiles || []).map((f, idx) => {
+                const { svg } = fileTypeIcon(f.mimeType, f.name);
+                return (
+                  <span key={`ef-${idx}`} className="composer-attachment-chip composer-attachment-chip--locked" title={f.name}>
+                    <span className="composer-attachment-chip-icon" aria-hidden="true">{svg}</span>
+                    <span className="composer-attachment-chip-name">{f.name}</span>
+                  </span>
+                );
+              })}
               {attachedFiles.map((f, idx) => {
                 const { svg, label } = fileTypeIcon(f.type, f.name);
                 const tip = `${f.name}\n${label} · ${fmtBytes(f.size)}`;

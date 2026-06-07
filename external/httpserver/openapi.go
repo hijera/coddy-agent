@@ -860,7 +860,7 @@ func openAPISpec() map[string]interface{} {
 						},
 						"inline_files": map[string]interface{}{
 							"type":        "array",
-							"description": "Allowed only for direct YAML model calls (not **`agent`** or **`plan`**). Each entry is a base64 data URI sent to the model as an image content part.",
+							"description": "Supported for all modes. For **`agent`** / **`plan`**: each file is saved to `~/.coddy/sessions/<id>/assets/` with read-only permissions (0o444) and the model receives a `<coddy_session_assets>` annotation with the on-disk paths. For direct YAML model: each entry becomes an image content part sent inline to the provider.",
 							"items":       map[string]interface{}{"$ref": "#/components/schemas/ResponsesInlineFile"},
 						},
 					},

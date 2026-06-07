@@ -88,7 +88,11 @@ import {
 import { isRedundantSessionPick } from "./sessions/pickSessionGuard";
 import { startSuggestSessionTitle } from "./sessionTitleSuggest";
 import { extractAtFileAttachments } from "./skills/draftAt";
-import { parseSessionAssetFiles } from "./skills/stripCoddyAttachments";
+import {
+  extractSessionAssetsXml,
+  parseSessionAssetFiles,
+  stripCoddyAttachmentsForUserDisplay,
+} from "./skills/stripCoddyAttachments";
 import {
   migrateWorkspaceAtRecents,
   recordWorkspaceAtRecent,
@@ -594,6 +598,8 @@ export function App() {
   const itemsRef = useRef<TranscriptItem[]>([]);
   itemsRef.current = items;
   const [editingUserMsgIdx, setEditingUserMsgIdx] = useState<number | null>(null);
+  const [editingAssetNote, setEditingAssetNote] = useState("");
+  const [editingFiles, setEditingFiles] = useState<{ name: string; mimeType: string }[]>([]);
   const pendingBranchSendRef = useRef<{ text: string; sid: string } | null>(null);
   // Sessions explicitly chosen via branch nav — skip resolveLatestLeaf for these.
   const skipLeafResolveRef = useRef<Set<string>>(new Set());
@@ -2124,6 +2130,8 @@ export function App() {
 
   useEffect(() => {
     setEditingUserMsgIdx(null);
+    setEditingAssetNote("");
+    setEditingFiles([]);
     if (!sessionId) {
       setItems([]);
       setDraft("");
@@ -3343,9 +3351,13 @@ export function App() {
             );
           }}
           onEdit={(content, userMsgIdx) => {
-            setDraft(content);
+            const assetNote = extractSessionAssetsXml(content);
+            setDraft(stripCoddyAttachmentsForUserDisplay(content));
             setEditingUserMsgIdx(userMsgIdx);
+            setEditingAssetNote(assetNote);
+            setEditingFiles(parseSessionAssetFiles(content));
           }}
+          {...(editingFiles.length > 0 ? { editingFiles } : {})}
           onBranchSwitch={(sid) => switchBranch(sid)}
           {...(knownSkillNames.size > 0 ? { knownSkillNames } : {})}
           onSend={(text: string, files?: File[]) => {
@@ -3358,8 +3370,12 @@ export function App() {
             setDraft("");
             if (editingUserMsgIdx !== null) {
               const idx = editingUserMsgIdx;
+              const note = editingAssetNote;
               setEditingUserMsgIdx(null);
-              void handleBranchSend(text, idx);
+              setEditingAssetNote("");
+              setEditingFiles([]);
+              const textWithAssets = note ? `${text}\n${note}` : text;
+              void handleBranchSend(textWithAssets, idx);
             } else {
               void streamResponses(text, files ? { files } : undefined);
             }

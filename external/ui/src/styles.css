@@ -3320,6 +3320,11 @@ textarea#composer {
   color: var(--text);
 }
 
+.composer-attachment-chip--locked {
+  opacity: 0.75;
+  padding-right: 10px;
+}
+
 .composer-bar-actions {
   display: flex;
   align-items: center;

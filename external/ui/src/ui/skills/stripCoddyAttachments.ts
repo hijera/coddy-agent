@@ -59,6 +59,16 @@ export function parseSessionAssetFiles(
 }
 
 /**
+ * Extracts the raw **<coddy_session_assets>** XML block from user message content,
+ * or returns an empty string if none is present.  Used in the edit flow so the
+ * block can be re-appended to the edited message before sending.
+ */
+export function extractSessionAssetsXml(content: string): string {
+  const m = /<coddy_session_assets>[\s\S]*?<\/coddy_session_assets>/i.exec(content);
+  return m ? m[0] : "";
+}
+
+/**
  * Collapses persisted **<coddy_attachment>** blocks for transcript UI.
  * Drops the XML (and hides file bodies); inserts **`@path`** only when the user text portion
  * does not already mention that path (**`composer`** previews duplicate **`@`** otherwise).

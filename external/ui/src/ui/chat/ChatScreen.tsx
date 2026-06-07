@@ -63,6 +63,7 @@ export function ChatScreen(props: {
   onPlanDocumentRun?: (slug: string) => void;
   onPlanDocumentDiscard?: (itemId: string, slug: string) => void;
   onEdit?: (content: string, userMsgIdx: number) => void;
+  editingFiles?: { name: string; mimeType: string }[];
   onBranchSwitch?: (sessionId: string) => void;
   sessionLoading?: boolean;
   sessionFadingOut?: boolean;
@@ -330,6 +331,9 @@ export function ChatScreen(props: {
                   ? { generating: true, onStop: props.onStop }
                   : {})}
                 {...(props.knownSkillNames ? { knownSkillNames: props.knownSkillNames } : {})}
+                {...(props.editingFiles && props.editingFiles.length > 0
+                  ? { editingFiles: props.editingFiles }
+                  : {})}
               />
             </div>
           </div>

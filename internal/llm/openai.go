@@ -252,16 +252,21 @@ func (p *openAIProvider) buildParams(messages []Message, tools []ToolDefinition)
 		Messages: oaiMessages,
 	}
 
-	if p.maxTokens > 0 {
-		params.MaxTokens = openai.Int(int64(p.maxTokens))
-	}
-	if p.temp > 0 {
-		params.Temperature = openai.Float(p.temp)
-	}
-	// reasoning_effort is only valid for reasoning models; callers pass an empty
-	// string for non-reasoning models so the field is omitted (omitzero).
+	// reasoning_effort is only valid for reasoning models; callers pass an empty string for
+	// non-reasoning models. Reasoning models also reject max_tokens (require
+	// max_completion_tokens) and a custom temperature, so the reasoning path differs.
 	if p.reasoningEffort != "" {
 		params.ReasoningEffort = openai.ReasoningEffort(p.reasoningEffort)
+		if p.maxTokens > 0 {
+			params.MaxCompletionTokens = openai.Int(int64(p.maxTokens))
+		}
+	} else {
+		if p.maxTokens > 0 {
+			params.MaxTokens = openai.Int(int64(p.maxTokens))
+		}
+		if p.temp > 0 {
+			params.Temperature = openai.Float(p.temp)
+		}
 	}
 
 	if len(tools) > 0 {

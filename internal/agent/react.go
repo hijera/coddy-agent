@@ -317,10 +317,12 @@ func (a *Agent) runReActLoop(
 						}
 						reasoningMs = d.Milliseconds()
 					}
+					reasonStore, reasonSig := reasoningForStorage(reasonTrim, reasoningBuf.String(), response)
 					assistantMsg := llm.Message{
 						Role:                llm.RoleAssistant,
 						Content:             response.Content,
-						Reasoning:           reasonTrim,
+						Reasoning:           reasonStore,
+						ReasoningSignature:  reasonSig,
 						ToolCalls:           response.ToolCalls,
 						ReasoningDurationMs: reasoningMs,
 						Model:               a.state.EffectiveModelID(a.cfg),
@@ -403,10 +405,12 @@ func (a *Agent) runReActLoop(
 		}
 
 		// Append assistant message to history.
+		reasonStore, reasonSig := reasoningForStorage(reasonTrim, reasoningBuf.String(), response)
 		assistantMsg := llm.Message{
 			Role:                llm.RoleAssistant,
 			Content:             response.Content,
-			Reasoning:           reasonTrim,
+			Reasoning:           reasonStore,
+			ReasoningSignature:  reasonSig,
 			ToolCalls:           response.ToolCalls,
 			ReasoningDurationMs: reasoningMs,
 			Model:               a.state.EffectiveModelID(a.cfg),
@@ -702,6 +706,16 @@ func (a *Agent) sendPlan(sessionID string, entries []acp.PlanEntry) error {
 		SessionUpdate: acp.UpdateTypePlan,
 		Entries:       entries,
 	})
+}
+
+// reasoningForStorage picks the reasoning text and signature to persist on an assistant message.
+// When the provider signs the reasoning (Anthropic extended thinking), the exact unmodified text
+// must be stored so the signature validates on replay; otherwise the trimmed text is used for display.
+func reasoningForStorage(trimmed, exact string, response *llm.Response) (text, signature string) {
+	if response != nil && response.ReasoningSignature != "" {
+		return exact, response.ReasoningSignature
+	}
+	return trimmed, ""
 }
 
 // getProvider creates the LLM provider for the given mode.

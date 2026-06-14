@@ -37,6 +37,10 @@ type Message struct {
 	// not support vision.
 	ImageParts []ImagePart `json:"image_parts,omitempty"`
 	Reasoning  string      `json:"reasoning,omitempty"`
+	// ReasoningSignature is the provider signature for the reasoning block (Anthropic extended
+	// thinking). It is replayed unmodified with the exact Reasoning text on later requests when
+	// thinking is enabled and the turn has tool calls; otherwise the Anthropic API rejects it.
+	ReasoningSignature string `json:"reasoning_signature,omitempty"`
 	// ReasoningDurationMs wall clock between first streamed reasoning delta and UI-equivalent finish
 	// (first non-whitespace text delta or first tool-call chunk); omitted when unset or zero.
 	ReasoningDurationMs int64      `json:"reasoning_duration_ms,omitempty"`
@@ -80,6 +84,10 @@ type ToolDefinition struct {
 type Response struct {
 	Content   string
 	ToolCalls []ToolCall
+	// Reasoning is the exact (unmodified) reasoning text, when the provider returns one.
+	Reasoning string
+	// ReasoningSignature pairs with Reasoning for providers that sign reasoning blocks (Anthropic).
+	ReasoningSignature string
 	// StopReason explains why generation stopped.
 	// "end_turn" | "tool_use" | "max_tokens"
 	StopReason string

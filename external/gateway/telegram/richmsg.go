@@ -17,11 +17,20 @@ import (
 //   - buildRichDraftMarkdown → the ephemeral streaming preview sent via
 //     sendRichMessageDraft (uses the draft-only <tg-thinking> block while a tool runs).
 
+// toolCall is one tool execution captured during a turn: its name, the JSON args,
+// the result preview, and whether it failed.
+type toolCall struct {
+	name   string
+	args   string
+	result string
+	failed bool
+}
+
 // buildRichMarkdown assembles the final rich-message markdown from the accumulated
-// LLM text and the list of tools that ran during the turn. The LLM text is passed
-// through verbatim (it is already GitHub-flavored Markdown); the tools, when any,
-// are appended as a collapsed-by-default <details> disclosure block.
-func buildRichMarkdown(llmText string, tools []string) string {
+// LLM text and the tools that ran during the turn. The LLM text is passed through
+// verbatim (it is already GitHub-flavored Markdown); each tool is appended as its own
+// collapsed-by-default <details> block showing its output.
+func buildRichMarkdown(llmText string, tools []toolCall) string {
 	text := strings.TrimRight(llmText, " \t\n")
 	details := richToolsDetails(tools)
 	if details == "" {
@@ -33,20 +42,37 @@ func buildRichMarkdown(llmText string, tools []string) string {
 	return text + "\n\n" + details
 }
 
-// richToolsDetails renders the executed tools as a collapsible <details> block.
-// Returns "" when no tools ran. The block is collapsed by default (no open attribute)
-// so it stays out of the way but remains available to the user.
-func richToolsDetails(tools []string) string {
+// richToolsDetails renders every executed tool as its own collapsed <details> block:
+// the summary is the tool name (❌ on failure), the body is the tool's output (or its
+// args when no output was captured) in a fenced code block. Returns "" when no tools ran.
+func richToolsDetails(tools []toolCall) string {
 	if len(tools) == 0 {
 		return ""
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "<details><summary>🛠 Tools used (%d)</summary>\n\n", len(tools))
-	for _, name := range tools {
-		fmt.Fprintf(&b, "- `%s`\n", name)
+	for _, t := range tools {
+		icon := "🛠"
+		if t.failed {
+			icon = "❌"
+		}
+		name := strings.TrimSpace(t.name)
+		if name == "" {
+			name = "tool"
+		}
+		fmt.Fprintf(&b, "<details><summary>%s %s</summary>\n\n", icon, name)
+		body := strings.TrimSpace(t.result)
+		if body == "" {
+			body = strings.TrimSpace(t.args)
+		}
+		if body != "" {
+			// Keep messages within Telegram limits and never let the body's own
+			// fences break out of the surrounding code block.
+			body = strings.ReplaceAll(truncate(body, 1500), "```", "ʼʼʼ")
+			fmt.Fprintf(&b, "```\n%s\n```\n\n", body)
+		}
+		b.WriteString("</details>\n")
 	}
-	b.WriteString("\n</details>")
-	return b.String()
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // buildRichDraftMarkdown assembles the streaming-preview markdown. While a tool is

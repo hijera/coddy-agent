@@ -17,25 +17,35 @@ func TestBuildRichMarkdown_PreservesNativeMarkdown(t *testing.T) {
 	}
 }
 
-func TestBuildRichMarkdown_AppendsCollapsibleToolsBlock(t *testing.T) {
-	got := buildRichMarkdown("Done.", []string{"read_file", "bash"})
-	// A collapsible <details> block lists the executed tools with the count in the summary.
-	if !strings.Contains(got, "<details>") || !strings.Contains(got, "</details>") {
-		t.Fatalf("expected a <details> block, got:\n%s", got)
+func TestBuildRichMarkdown_PerToolCollapsedBlocksWithOutput(t *testing.T) {
+	got := buildRichMarkdown("Done.", []toolCall{
+		{name: "read_file", result: "package main"},
+		{name: "bash", result: "exit 0"},
+	})
+	// Each tool is its own collapsed <details> block (two here), and the body shows output.
+	if n := strings.Count(got, "<details>"); n != 2 {
+		t.Fatalf("expected one <details> per tool (2), got %d:\n%s", n, got)
 	}
-	if !strings.Contains(got, "<summary>") || !strings.Contains(got, "(2)") {
-		t.Fatalf("expected a <summary> with tool count (2), got:\n%s", got)
+	if !strings.Contains(got, "read_file") || !strings.Contains(got, "package main") {
+		t.Fatalf("expected read_file with its output, got:\n%s", got)
 	}
-	if !strings.Contains(got, "read_file") || !strings.Contains(got, "bash") {
-		t.Fatalf("expected both tool names listed, got:\n%s", got)
+	if !strings.Contains(got, "bash") || !strings.Contains(got, "exit 0") {
+		t.Fatalf("expected bash with its output, got:\n%s", got)
 	}
 	if !strings.HasPrefix(got, "Done.") {
-		t.Fatalf("expected LLM text to precede the tools block, got:\n%s", got)
+		t.Fatalf("expected LLM text to precede the tool blocks, got:\n%s", got)
+	}
+}
+
+func TestBuildRichMarkdown_FailedToolMarked(t *testing.T) {
+	got := buildRichMarkdown("", []toolCall{{name: "bash", result: "boom", failed: true}})
+	if !strings.Contains(got, "❌") || !strings.Contains(got, "bash") {
+		t.Fatalf("expected failed tool marked with ❌, got:\n%s", got)
 	}
 }
 
 func TestBuildRichMarkdown_NoToolsNoBlock(t *testing.T) {
-	got := buildRichMarkdown("Plain answer.", []string{})
+	got := buildRichMarkdown("Plain answer.", []toolCall{})
 	if strings.Contains(got, "<details>") {
 		t.Fatalf("no <details> block expected when no tools ran, got:\n%s", got)
 	}
@@ -45,7 +55,7 @@ func TestBuildRichMarkdown_NoToolsNoBlock(t *testing.T) {
 }
 
 func TestBuildRichMarkdown_ToolsOnlyNoText(t *testing.T) {
-	got := buildRichMarkdown("", []string{"bash"})
+	got := buildRichMarkdown("", []toolCall{{name: "bash", result: "ok"}})
 	if !strings.Contains(got, "<details>") || !strings.Contains(got, "bash") {
 		t.Fatalf("expected a tools block even with empty LLM text, got:\n%s", got)
 	}

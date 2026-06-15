@@ -39,10 +39,11 @@ type Sender struct {
 	rich richConfig // Bot API 10.1 Rich Messages mode (off → legacy formatting)
 
 	mu          sync.Mutex
-	responseBuf strings.Builder // LLM text only — sent in Flush()
-	currentTool string          // tool currently running — shown in stream, not in Flush()
-	tools       []string        // names of tools executed this turn, in order (deduplicated)
-	liveID      int             // message ID being progressively edited; 0 = none sent yet
+	responseBuf strings.Builder      // LLM text only — sent in Flush()
+	currentTool string               // tool currently running — shown in stream, not in Flush()
+	toolOrder   []string             // tool-call keys in execution order
+	toolByID    map[string]*toolCall // captured tool calls (name, args, result) keyed by call id
+	liveID      int                  // message ID being progressively edited; 0 = none sent yet
 	lastEdit    time.Time
 	lastTyping  time.Time
 }
@@ -55,17 +56,41 @@ type richConfig struct {
 }
 
 func newSender(bot *tgbotapi.BotAPI, chatID int64, replyTo int, log *slog.Logger, rich richConfig) *Sender {
-	return &Sender{bot: bot, chatID: chatID, replyTo: replyTo, log: log, rich: rich}
+	return &Sender{bot: bot, chatID: chatID, replyTo: replyTo, log: log, rich: rich,
+		toolByID: make(map[string]*toolCall)}
 }
 
-// addTool records a tool name once, preserving execution order. Caller holds s.mu.
-func (s *Sender) addTool(name string) {
-	for _, t := range s.tools {
-		if t == name {
-			return
+// ensureTool returns the toolCall for key, creating and ordering it on first sight.
+// Caller holds s.mu.
+func (s *Sender) ensureTool(key string) *toolCall {
+	if tc, ok := s.toolByID[key]; ok {
+		return tc
+	}
+	tc := &toolCall{}
+	s.toolByID[key] = tc
+	s.toolOrder = append(s.toolOrder, key)
+	return tc
+}
+
+// collectTools returns the captured tool calls in execution order. Caller holds s.mu.
+func (s *Sender) collectTools() []toolCall {
+	out := make([]toolCall, 0, len(s.toolOrder))
+	for _, k := range s.toolOrder {
+		if tc := s.toolByID[k]; tc != nil {
+			out = append(out, *tc)
 		}
 	}
-	s.tools = append(s.tools, name)
+	return out
+}
+
+// toolResultText extracts the first text content block from a tool status update.
+func toolResultText(items []acp.ToolCallResultItem) string {
+	for _, it := range items {
+		if it.Content.Type == acp.ContentTypeText {
+			return it.Content.Text
+		}
+	}
+	return ""
 }
 
 // SendSessionUpdate handles streaming events from the agent.
@@ -101,7 +126,8 @@ func (s *Sender) SendSessionUpdate(_ string, update interface{}) error {
 		}
 		s.mu.Lock()
 		s.currentTool = title
-		s.addTool(title)
+		tc := s.ensureTool(toolKey(u.ToolCallID, title))
+		tc.name = title
 		llmText := s.responseBuf.String()
 		now := time.Now()
 		wantEdit := now.Sub(s.lastEdit) >= editInterval
@@ -122,8 +148,50 @@ func (s *Sender) SendSessionUpdate(_ string, update interface{}) error {
 		if wantEdit {
 			s.stream(llmText, title)
 		}
+
+	case acp.ToolCallStatusUpdate:
+		// Capture tool args (in_progress) and output (completed/failed) for the
+		// per-tool <details> blocks rendered in the final rich message.
+		text := toolResultText(u.Content)
+		s.mu.Lock()
+		if tc := s.toolForStatus(u.ToolCallID); tc != nil {
+			switch u.Status {
+			case "in_progress":
+				tc.args = text
+			case "failed", "cancelled":
+				tc.result = text
+				tc.failed = true
+			default: // "completed" and any terminal status
+				if text != "" {
+					tc.result = text
+				}
+			}
+		}
+		s.mu.Unlock()
 	}
 	return nil
+}
+
+// toolKey keys a started tool call by its id, falling back to the title when the
+// provider does not supply an id.
+func toolKey(id, title string) string {
+	if k := strings.TrimSpace(id); k != "" {
+		return k
+	}
+	return "title:" + title
+}
+
+// toolForStatus resolves a status update to its tool: by id when present, otherwise
+// the most recently started tool (status updates arrive right after their start, in
+// sequence). Returns nil when there is no tool to attach to. Caller holds s.mu.
+func (s *Sender) toolForStatus(id string) *toolCall {
+	if k := strings.TrimSpace(id); k != "" {
+		return s.ensureTool(k)
+	}
+	if len(s.toolOrder) == 0 {
+		return nil
+	}
+	return s.toolByID[s.toolOrder[len(s.toolOrder)-1]]
 }
 
 // stream dispatches a progressive update to the right transport: a rich draft
@@ -173,7 +241,7 @@ func (s *Sender) Flush() {
 	text := s.responseBuf.String()
 	s.responseBuf.Reset()
 	s.currentTool = ""
-	tools := append([]string(nil), s.tools...)
+	tools := s.collectTools()
 	liveID := s.liveID
 	s.liveID = 0
 	replyTo := s.replyTo
@@ -191,16 +259,31 @@ func (s *Sender) Flush() {
 
 // flushRich sends the final persistent message via sendRichMessage. It returns
 // true on success and false when the caller should fall back to legacy formatting.
-func (s *Sender) flushRich(text string, tools []string, replyTo int) bool {
+//
+// If the combined message (answer + per-tool blocks) is rejected, it retries with the
+// answer alone before giving up — the tool-output blocks are the riskiest part of the
+// payload, so this keeps the assistant's reply visible even when they break the parse.
+func (s *Sender) flushRich(text string, tools []toolCall, replyTo int) bool {
 	md := buildRichMarkdown(text, tools)
 	if md == "" {
 		return true // nothing to send; treat as handled
 	}
-	if _, err := sendRichMessage(s.bot, s.chatID, md, replyTo); err != nil {
-		s.log.Warn("telegram: rich send failed, falling back to legacy", "err", err)
-		return false
+	if _, err := sendRichMessage(s.bot, s.chatID, md, replyTo); err == nil {
+		return true
+	} else {
+		s.log.Warn("telegram: rich send failed", "err", err)
 	}
-	return true
+
+	answer := strings.TrimSpace(text)
+	if answer != "" && answer != md {
+		if _, err := sendRichMessage(s.bot, s.chatID, answer, replyTo); err == nil {
+			s.log.Warn("telegram: sent answer without tool blocks after rich failure")
+			return true
+		} else {
+			s.log.Warn("telegram: answer-only rich retry failed", "err", err)
+		}
+	}
+	return false
 }
 
 // flushLegacy sends the final message using Telegram legacy Markdown, editing the

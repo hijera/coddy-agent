@@ -70,11 +70,15 @@ func TestSender_RichFlow_DraftsThenFinalizesWithTools(t *testing.T) {
 		draftID:    7,
 	})
 
-	// Stream some text, then a tool call, then more text.
+	// Stream some text, run a tool (with its result), then the final answer.
 	_ = s.SendSessionUpdate("sess", acp.MessageChunkUpdate{
 		Content: acp.ContentBlock{Type: acp.ContentTypeText, Text: "Hello "},
 	})
-	_ = s.SendSessionUpdate("sess", acp.ToolCallUpdate{Title: "bash"})
+	_ = s.SendSessionUpdate("sess", acp.ToolCallUpdate{ToolCallID: "t1", Title: "bash"})
+	_ = s.SendSessionUpdate("sess", acp.ToolCallStatusUpdate{
+		ToolCallID: "t1", Status: "completed",
+		Content: []acp.ToolCallResultItem{{Type: "content", Content: acp.ContentBlock{Type: acp.ContentTypeText, Text: "exit 0"}}},
+	})
 	_ = s.SendSessionUpdate("sess", acp.MessageChunkUpdate{
 		Content: acp.ContentBlock{Type: acp.ContentTypeText, Text: "world"},
 	})
@@ -101,9 +105,56 @@ func TestSender_RichFlow_DraftsThenFinalizesWithTools(t *testing.T) {
 	if !strings.Contains(rm, "details") || !strings.Contains(rm, "bash") {
 		t.Fatalf("final message should contain a tools <details> block listing bash, got: %s", rm)
 	}
+	if !strings.Contains(rm, "exit 0") {
+		t.Fatalf("final message should contain the captured tool output, got: %s", rm)
+	}
 	// The legacy live message path must not be used in rich mode.
 	if len(srvCap.byEndpoint("editMessageText")) != 0 {
 		t.Fatalf("rich mode must not call editMessageText")
+	}
+}
+
+// Regression for "after using tools, the assistant reply does not appear": if the
+// combined message (answer + tool blocks) is rejected, the Sender retries with the
+// answer alone so the reply is never lost.
+func TestSender_RichFlow_AnswerSurvivesToolBlockRejection(t *testing.T) {
+	var sends []string // rich_message payloads, in order
+	var mu sync.Mutex
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/botTESTTOKEN/sendRichMessage" {
+			rm := r.PostFormValue("rich_message")
+			mu.Lock()
+			sends = append(sends, rm)
+			mu.Unlock()
+			// Telegram rejects the message while it carries a tool <details> block.
+			if strings.Contains(rm, "details") {
+				_, _ = w.Write([]byte(`{"ok":false,"error_code":400,"description":"bad rich entity"}`))
+				return
+			}
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":1,"date":0,"chat":{"id":5,"type":"private"}}}`))
+	}))
+	defer srv.Close()
+
+	s := newSender(stubBot(t, srv.URL), 5, 0, slog.Default(), richConfig{enabled: true, allowDraft: false})
+	_ = s.SendSessionUpdate("sess", acp.ToolCallUpdate{ToolCallID: "t1", Title: "bash"})
+	_ = s.SendSessionUpdate("sess", acp.MessageChunkUpdate{
+		Content: acp.ContentBlock{Type: acp.ContentTypeText, Text: "The answer is 42"},
+	})
+	s.Flush()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(sends) != 2 {
+		t.Fatalf("expected two sendRichMessage attempts (combined, then answer-only), got %d: %v", len(sends), sends)
+	}
+	if !strings.Contains(sends[0], "details") {
+		t.Fatalf("first attempt should be the combined message, got: %s", sends[0])
+	}
+	if strings.Contains(sends[1], "details") || !strings.Contains(sends[1], "The answer is 42") {
+		t.Fatalf("retry should be the answer alone (no tool blocks), got: %s", sends[1])
 	}
 }
 

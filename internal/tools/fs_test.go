@@ -68,8 +68,8 @@ func TestWriteFile(t *testing.T) {
 	reg := tools.NewRegistry()
 
 	args, _ := json.Marshal(map[string]interface{}{
-		"filePath": "output.txt",
-		"content":  "new file content",
+		"path":    "output.txt",
+		"content": "new file content",
 	})
 	result, err := reg.Execute(context.Background(), "write", string(args), env)
 	if err != nil {
@@ -93,8 +93,8 @@ func TestWriteFileCreatesDirectories(t *testing.T) {
 	reg := tools.NewRegistry()
 
 	args, _ := json.Marshal(map[string]interface{}{
-		"filePath": "subdir/nested/file.txt",
-		"content":  "nested content",
+		"path":    "subdir/nested/file.txt",
+		"content": "nested content",
 	})
 	_, err := reg.Execute(context.Background(), "write", string(args), env)
 	if err != nil {
@@ -236,8 +236,8 @@ func TestApplyDiff(t *testing.T) {
 `
 	reg := tools.NewRegistry()
 	args, _ := json.Marshal(map[string]interface{}{
-		"filePath": "file.txt",
-		"patch":    diff,
+		"path":  "file.txt",
+		"patch": diff,
 	})
 	_, err := reg.Execute(context.Background(), "apply_patch", string(args), env)
 	if err != nil {

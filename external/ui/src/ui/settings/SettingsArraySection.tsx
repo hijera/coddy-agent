@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  IconTrash,
   SchemaForm,
   defaultForSchema,
   type FieldOverride,
@@ -40,6 +41,9 @@ export function SettingsArraySection(props: {
   labelField?: string | undefined;
   fieldOverride?: FieldOverride | undefined;
   addLabel?: string | undefined;
+  /** When true (desktop), the item form's back button shows the item's name
+   * (provider / model) instead of the generic "Back to list". */
+  backLabelUsesItemName?: boolean | undefined;
 }) {
   const { schema, value, onChange, labelField, fieldOverride } = props;
   const [view, setView] = useState<View>({ mode: "list" });
@@ -61,22 +65,17 @@ export function SettingsArraySection(props: {
         <div className="settings-detail-head">
           <button
             type="button"
-            className="settings-btn"
+            className="settings-btn settings-btn-back"
             data-testid="settings-detail-back"
+            title="Back to list"
             onClick={() => setView({ mode: "list" })}
           >
-            ← Back to list
-          </button>
-          <button
-            type="button"
-            className="settings-btn settings-btn-danger"
-            data-testid="settings-detail-remove"
-            onClick={() => {
-              onChange(arr.filter((_, j) => j !== index));
-              setView({ mode: "list" });
-            }}
-          >
-            Remove
+            <span className="settings-btn-back-arrow" aria-hidden>
+              ←
+            </span>
+            {props.backLabelUsesItemName
+              ? rowLabel(item, labelField, index)
+              : "Back to list"}
           </button>
         </div>
         <SchemaForm
@@ -114,11 +113,12 @@ export function SettingsArraySection(props: {
               </button>
               <button
                 type="button"
-                className="settings-btn settings-btn-danger"
+                className="settings-btn settings-btn-icon settings-btn-danger"
                 aria-label={`Remove ${rowLabel(row, labelField, i)}`}
+                title="Remove"
                 onClick={() => onChange(arr.filter((_, j) => j !== i))}
               >
-                Remove
+                <IconTrash />
               </button>
             </li>
           ))}
@@ -126,7 +126,7 @@ export function SettingsArraySection(props: {
       )}
       <button
         type="button"
-        className="settings-btn"
+        className="settings-btn settings-master-add"
         data-testid="settings-master-add"
         onClick={() => {
           const seed = defaultForSchema(itemSchema);

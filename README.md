@@ -28,10 +28,10 @@
 | ![Chat](docs/assets/screenshot-fullhd-chat.png) | ![Mobile chat](docs/assets/screenshot-mobile-chat.png) |
 | **History** | **Scheduler** |
 | ![History](docs/assets/screenshot-fullhd-history.png) | ![Scheduler](docs/assets/screenshot-fullhd-scheduler.png) |
-| **Settings** | **Settings — Skills** |
-| ![Settings](docs/assets/screenshot-fullhd-settings.png) | ![Settings Skills](docs/assets/screenshot-fullhd-settings-skills.png) |
-| **Settings — Appearance** | |
-| ![Settings Appearance](docs/assets/screenshot-fullhd-settings-appearance.png) | |
+| **Scheduler — job editor** | **Settings** |
+| ![Scheduler job editor](docs/assets/screenshot-fullhd-scheduler-job.png) | ![Settings](docs/assets/screenshot-fullhd-settings.png) |
+| **Settings — Skills** | **Settings — Appearance** |
+| ![Settings Skills](docs/assets/screenshot-fullhd-settings-skills.png) | ![Settings Appearance](docs/assets/screenshot-fullhd-settings-appearance.png) |
 
 Screenshots: desktop at **1920×1080**, mobile at **390×844** from the embedded UI (`coddy http` + Vite dev). Spec and dev workflow: [`docs/ui.md`](docs/ui.md), layout tokens: [`DESIGN.md`](DESIGN.md).
 

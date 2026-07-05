@@ -374,7 +374,7 @@ Store the provided design reference images under `docs/assets/`.
 
 When describing a specific element, link to the relevant image file.
 
-- Full HD UI tour (README): `docs/assets/screenshot-fullhd-start.png`, `screenshot-fullhd-chat.png`, `screenshot-fullhd-history.png`, `screenshot-fullhd-scheduler.png`, `screenshot-fullhd-settings.png`
+- Full HD UI tour (README): `docs/assets/screenshot-fullhd-start.png`, `screenshot-fullhd-chat.png`, `screenshot-fullhd-history.png`, `screenshot-fullhd-scheduler.png`, `screenshot-fullhd-scheduler-job.png`, `screenshot-fullhd-settings.png`, `screenshot-fullhd-settings-skills.png`, `screenshot-fullhd-settings-appearance.png`
 - Mobile UI tour (README): `docs/assets/screenshot-mobile-start.png`, `screenshot-mobile-chat.png`
 - Home layout: `docs/assets/ref-home-1.png`, `ref-home-2.png`, `ref-home-3.png`
 - Home scroll state: `docs/assets/ref-home-scroll.png`

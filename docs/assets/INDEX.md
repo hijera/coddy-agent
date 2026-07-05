@@ -21,15 +21,19 @@ Captured from local `vite` + `coddy http` with `CODDY_UI_BACKEND`.
 - `pw-navbar-390-mobile-topbar.png` - max-width 1199px shell, rail as top bar row
 - `pw-navbar-390-sessions-drawer.png` - History opens chats drawer overlay
 
-## Full HD tour (README, May 2026)
+## Full HD tour (README, July 2026)
 
-Captured at **1920×1080** via Playwright MCP (`vite` + `coddy http`, `CODDY_UI_BACKEND`).
+Captured at **1920×1080** via Playwright MCP against the embedded SPA (`make build TAGS="http ui scheduler memory"` + `coddy http` on a disposable `--home`). Mobile shots at **390×844**. Theme is the default **Dark** (cookie `coddy_ui_theme=dark`; switch via Settings → Appearance). Provider `api_key` is left empty in the demo config and supplied via `RPA_API_KEY` so no secret is rendered.
 
 - `screenshot-fullhd-start.png` - new chat / hero start screen (README, above fold)
-- `screenshot-fullhd-chat.png` - active session transcript (`#/s/...`)
+- `screenshot-fullhd-chat.png` - active session transcript with agent tool/thinking/memory rows (`#/s/...`)
 - `screenshot-fullhd-history.png` - History drawer on a session (`#/s/...?history=1`)
 - `screenshot-fullhd-scheduler.png` - scheduler list plus job editor (`#/scheduler/jobs/nightly-docs`)
-- `screenshot-fullhd-settings.png` - settings drawer (`#/settings`)
+- `screenshot-fullhd-scheduler-job.png` - job settings editor dialog only (element shot of `scheduler-editor-panel`)
+- `screenshot-fullhd-settings.png` - settings drawer, tabbed nav, LLM providers tab (`#/settings/providers`)
+- `screenshot-fullhd-settings-skills.png` - settings Skills tab (dirs + installed skills)
+- `screenshot-fullhd-settings-appearance.png` - settings Appearance tab (7 theme swatches)
+- `screenshot-mobile-start.png`, `screenshot-mobile-chat.png` - 390×844 top-bar shell
 
 ## Primary
 

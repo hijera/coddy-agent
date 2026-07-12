@@ -1,6 +1,12 @@
 import React from "react";
 import { afterEach, expect, test } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { SettingsSection } from "./SettingsSection";
 import type { JsonSchema } from "./SchemaForm";
 import type { SectionDescriptor } from "./settingsSections";
@@ -73,6 +79,68 @@ test("NeuralDeep provider shows a read-only API base URL pinned to the fixed end
   // Editing is rejected: the field stays pinned to the fixed endpoint.
   fireEvent.change(base, { target: { value: "https://custom.example/v1" } });
   expect(base.value).toBe("https://api.neuraldeep.ru/v1");
+});
+
+const modelsSection: SectionDescriptor = {
+  id: "models",
+  label: "Logical models",
+  kind: "array",
+  schemaKey: "models",
+  labelField: "model",
+};
+
+const modelsSchema: JsonSchema = {
+  type: "object",
+  properties: {
+    models: {
+      type: "array",
+      title: "Logical models",
+      items: {
+        type: "object",
+        properties: {
+          model: { type: "string", title: "Model id" },
+        },
+        "x-coddy-property-order": ["model"],
+      },
+    },
+  },
+};
+
+test("renaming the sole model id follows through to agent.model", async () => {
+  function ModelsHarness() {
+    const [doc, setDoc] = React.useState<Record<string, unknown>>({
+      providers: [{ name: "neuraldeep", type: "neuraldeep" }],
+      models: [{ model: "neuraldeep/gpt-120b-oss" }],
+      agent: { model: "neuraldeep/gpt-120b-oss", max_turns: 20 },
+    });
+    return (
+      <>
+        <span data-testid="agent-model">
+          {String((doc.agent as Record<string, unknown>).model)}
+        </span>
+        <SettingsSection
+          section={modelsSection}
+          schema={modelsSchema}
+          doc={doc}
+          setDoc={setDoc}
+        />
+      </>
+    );
+  }
+
+  render(<ModelsHarness />);
+  fireEvent.click(screen.getByTestId("settings-master-item-0"));
+
+  const model = screen.getByTestId("model-field-model") as HTMLInputElement;
+  expect(model.value).toBe("neuraldeep/gpt-120b-oss");
+  fireEvent.change(model, { target: { value: "neuraldeep/qwen-3.6" } });
+
+  // The ReAct default-model reference tracked the rename automatically.
+  await waitFor(() => {
+    expect(screen.getByTestId("agent-model").textContent).toBe(
+      "neuraldeep/qwen-3.6",
+    );
+  });
 });
 
 test("switching type away from NeuralDeep restores the previously entered API base", async () => {

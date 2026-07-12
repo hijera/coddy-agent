@@ -91,6 +91,17 @@ Session title
 - **New chat** defaults the level from cookie **`coddy_llm_reasoning`**, then the model's **`reasoning_default`**, then **`medium`** (or the first offered level). **Opening a session** restores it from **`GET /coddy/sessions/{id}/messages`** field **`selectedReasoning`**. Switching to a model that does not offer the current level clamps it to a valid one (see **`pickReasoningLevel`** in **`chat/reasoningSelection.ts`**).
 - Changing the level writes the cookie and **`PATCH`** **`selectedReasoning`** on the active session; ReAct turns also send **`metadata.reasoning`** on **`POST /v1/responses`** so a brand-new session applies it on the first turn.
 
+### Per-session workspace (folder / branch / worktree chips)
+
+- A chip row renders at the top of the composer card (**`WorkspaceChips.tsx`**, helpers in **`chat/workspaceContext.ts`**): **folder chip** (workspace basename, full path in tooltip), **branch chip** (current git branch; only when the workspace is a git repository), and a **worktree toggle chip**.
+- Context loads from **`GET /coddy/workspace/context`** with **`X-Coddy-Session-ID`** whenever the viewed session changes; without a session the server default cwd is shown.
+- **Folder chip** opens a folder picker fed by **`GET /coddy/workspace/folders?path=`**: it starts at the parent of the current workspace (sibling projects one click away), row click selects the folder, the chevron browses into it, **`..`** goes up. Selecting calls **`POST /coddy/sessions/{id}/workspace`** **`{"path"}`** — the session cwd switches and persists; skills, project rules, and slash commands re-derive from the new cwd.
+- **Branch chip** opens the branch list (current first, marked selected). Picking one posts **`{"branch", "worktree": <toggle>}`**: in-place checkout by default, a dedicated worktree under **`<home>/worktrees/<repo>/`** when the toggle is on, or a jump to the worktree that already has the branch checked out (including back to the main checkout).
+- **Worktree chip** is a preference toggle (**`aria-pressed`**); when the session already runs inside a linked worktree it shows as on and disabled.
+- **Pre-session (draft/home)**: picks are stored client-side, previewed via **`GET /coddy/workspace/context?path=`**, and applied to the new session id on first send before **`POST /v1/responses`**. Switching to another session drops pending picks.
+- Errors (missing folder **400**, git conflicts **409**) keep the current chips; the context is re-fetched to stay truthful.
+- Automated checks: **`chat/workspaceContext.test.ts`** (helpers), **`chat/WorkspaceChips.test.tsx`** (chips, menus, fetch flows); backend behavior is specified executable in **`external/httpserver/features/workspace_switching.feature`** (godog).
+
 ## Session list
 
 - **History** panel lists sessions via `GET /coddy/sessions` (still a **drawer**, not a persistent second column).

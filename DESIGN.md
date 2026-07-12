@@ -272,6 +272,16 @@ Ordering rules:
 
 Muted **Auto** pill tracks future modality toggles; UI copy stays English everywhere.
 
+### Composer workspace chips (folder / branch / worktree)
+
+A chip row (**`.composer-context-chips`**) renders as the **first child** of **`.composer-card`**, above attachments and the field — mirroring Claude Desktop's workspace chips. Implemented by **`WorkspaceChips.tsx`** (helpers in **`chat/workspaceContext.ts`**); data from **`GET /coddy/workspace/context`** (session header, or **`?path=`** preview before a session exists).
+
+- **Folder chip** (**`composer-workspace-chip`**) — folder icon plus workspace basename (full path in **`title`**). Click opens the **folder picker** (**`workspace-folder-menu`**, **`mode-menu`** family): the current path header, a **`..`** row, and subfolder rows from **`GET /coddy/workspace/folders`**. Clicking a row **selects** that folder; the chevron (**`workspace-folder-browse-*`**) **navigates into** it without selecting. The picker opens at the **parent** of the current workspace so sibling projects are one click away.
+- **Branch chip** (**`composer-branch-chip`**) — git branch icon plus the current branch; rendered **only** when **`is_git_repo`**. Click opens the branch list (**`workspace-branch-menu`**), current branch first and marked **`is-selected`**. Picking a branch calls **`POST /coddy/sessions/{id}/workspace`** with **`{"branch", "worktree": <pref>}`**.
+- **Worktree chip** (**`composer-worktree-chip`**) — toggle (**`aria-pressed`**) for the **open-branch-switches-in-a-worktree** preference. Lights up (accent) when active; when the session already runs inside a worktree it is **on and disabled** (state, not a choice). Branches already checked out in another worktree jump there regardless of the toggle.
+- **Pre-session (draft/home)** — chips show the server-default workspace. Choices are kept client-side (**pending**) and previewed via **`GET /coddy/workspace/context?path=`**; the first send applies them to the fresh session id (**`POST .../workspace`**) before **`POST /v1/responses`**. Navigating to another session drops pending choices.
+- Menus follow the **`Mode`**/**`Model`** conventions: anchored **`mode-menu--portal`** (**`opens-down`** on the hero, **`opens-up`** when docked) on desktop, full-width bottom sheet (**`mode-menu--sheet`**) on narrow shells.
+
 ### Composer context meter
 
 Ring to the **left** of **Send** in **`Composer.tsx`**. Implemented by **`ContextUsageRing`**: inner stroke always visible; outer progress arc only when usage **> 0**, flat color (no gradient or shadow), fill from **12 o'clock** clockwise. Colors use **`--coddy-context-ring-inner`** and **`--coddy-context-ring-fg`** (both themes in **`styles.css`**). Dark outer arc **`#f5f3ff`** (logo stroke); light outer arc **`var(--accent)`**.

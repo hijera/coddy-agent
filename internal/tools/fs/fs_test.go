@@ -11,6 +11,94 @@ import (
 	"github.com/EvilFreelancer/coddy-agent/internal/tooling"
 )
 
+func TestReadOffsetBeyondEndReturnsError(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "short.txt")
+	if err := os.WriteFile(path, []byte("first\nsecond\nthird"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := executeRead(context.Background(), `{"path":"short.txt","offset":1200,"limit":200}`, &tooling.Env{CWD: root})
+	if err == nil {
+		t.Fatal("expected an out-of-range offset error")
+	}
+	if !strings.Contains(err.Error(), "offset 1200 is beyond end of file (3 lines)") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSliceLinesBoundaryCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		start   int
+		end     int
+		want    string
+		wantErr string
+	}{
+		{
+			name:    "offset zero is normalized to the first line",
+			content: "first\nsecond\nthird",
+			start:   0,
+			end:     1,
+			want:    "first",
+		},
+		{
+			name:    "offset at the final line is valid",
+			content: "first\nsecond\nthird",
+			start:   3,
+			end:     3,
+			want:    "third",
+		},
+		{
+			name:    "limit extending beyond EOF is clipped",
+			content: "first\nsecond\nthird",
+			start:   2,
+			end:     200,
+			want:    "second\nthird",
+		},
+		{
+			name:    "trailing newline is preserved without creating a phantom line",
+			content: "first\nsecond\nthird\n",
+			start:   3,
+			end:     200,
+			want:    "third\n",
+		},
+		{
+			name:    "offset after a trailing newline reports the real line count",
+			content: "first\nsecond\nthird\n",
+			start:   4,
+			end:     200,
+			wantErr: "offset 4 is beyond end of file (3 lines)",
+		},
+		{
+			name:    "offset into an empty file reports zero lines",
+			content: "",
+			start:   1,
+			end:     1,
+			wantErr: "offset 1 is beyond end of file (0 lines)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := sliceLines(tt.content, tt.start, tt.end)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("error = %v, want containing %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("sliceLines: %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("result = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // --- patch.go: unified diff / v4a patch ------------------------------------
 
 func TestApplyUnifiedDiff_hunkZeroOriginDoesNotPanic(t *testing.T) {

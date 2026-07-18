@@ -22,6 +22,7 @@ var AllowedLLMProviderTypes = map[string]struct{}{
 	"openai":     {},
 	"anthropic":  {},
 	"neuraldeep": {},
+	"codex":      {},
 }
 
 // ProviderConfig is one entry under YAML key providers.

@@ -44,6 +44,12 @@ providers:
   #   type: neuraldeep
   #   api_key: "${NEURALDEEP_API_KEY}"
 
+  # Codex CLI ChatGPT (OAuth) credentials. Run `codex login` once so
+  # ~/.codex/auth.json holds ChatGPT tokens; coddy reads and refreshes them
+  # automatically (no api_key needed). Uses the ChatGPT Codex backend (Responses API).
+  # - name: codex
+  #   type: codex
+
   # OpenAI-compatible (DeepSeek, Groq, Together, etc.)
   # Use type openai and include /v1 in api_base.
   # - name: deepseek
@@ -64,6 +70,10 @@ models:
   #   max_tokens: 8192
   #   reasoning_default: medium       # level pre-selected for new chats (must be a valid level)
   #   # reasoning_levels: [low, high] # optional: override the offered levels; [] hides the selector
+
+  # - model: "codex/gpt-5.6-sol"     # provider name / Codex model slug (see ~/.codex/models_cache.json)
+  #   max_tokens: 8192
+  #   reasoning_default: medium
 
   # - model: "neuraldeep/gpt-oss-120b"
   #   max_tokens: 8192

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -41,6 +42,9 @@ func defaultModelListBaseURL(providerType string) string {
 // an error so callers can surface auth or connectivity failures (and fall back to
 // manual entry).
 func ListModels(ctx context.Context, in ProviderInput) ([]ModelEntry, error) {
+	if in.Type == "codex" {
+		return listCodexModels()
+	}
 	var url string
 	switch in.Type {
 	case "openai", "anthropic", "neuraldeep":
@@ -120,6 +124,45 @@ func ListModels(ctx context.Context, in ProviderInput) ([]ModelEntry, error) {
 			name = strings.TrimSpace(m.DisplayName)
 		}
 		out = append(out, ModelEntry{ID: id, Name: name})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+// listCodexModels reads the models the Codex CLI advertises from its local cache
+// (~/.codex/models_cache.json), which is maintained by `codex`. The Codex backend
+// has no plain {base}/models endpoint, so this offline cache is the model source.
+// Entries are de-duplicated and sorted by id.
+func listCodexModels() ([]ModelEntry, error) {
+	path := codexModelsCachePath()
+	if path == "" {
+		return nil, fmt.Errorf("list models: could not locate Codex models cache (set CODEX_HOME)")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("list models: read %s (run `codex` once to populate): %w", path, err)
+	}
+	var cache struct {
+		Models []struct {
+			Slug        string `json:"slug"`
+			DisplayName string `json:"display_name"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(data, &cache); err != nil {
+		return nil, fmt.Errorf("list models: parse %s: %w", path, err)
+	}
+	seen := make(map[string]struct{}, len(cache.Models))
+	out := make([]ModelEntry, 0, len(cache.Models))
+	for _, m := range cache.Models {
+		id := strings.TrimSpace(m.Slug)
+		if id == "" {
+			continue
+		}
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, ModelEntry{ID: id, Name: strings.TrimSpace(m.DisplayName)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil

@@ -94,6 +94,12 @@ func (a *Agent) Run(ctx context.Context, prompt []acp.ContentBlock) (string, err
 	// Build the user message from prompt content blocks.
 	a.state.ClearMemoryCopilotBlock()
 	userText := contentBlocksToText(prompt)
+
+	// The built-in /compact command compacts history instead of running the
+	// ReAct loop; the command text itself never enters the transcript.
+	if instructions, ok := parseCompactCommand(userText); ok {
+		return a.runCompactCommand(ctx, instructions)
+	}
 	imageParts := a.state.TakePendingImageParts()
 	messageContent := userText
 	if note := filePathsNote(imageParts); note != "" {

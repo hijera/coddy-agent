@@ -493,15 +493,16 @@ func TestSessionNewSendsAvailableSlashCommandsUpdate(t *testing.T) {
 	if slash == nil {
 		t.Fatalf("expected AvailableCommandsUpdate in %#v", snd.ups)
 	}
-	if len(slash.AvailableCommands) != 2 {
+	// Skills plus the built-in compact command (advertised while compaction is enabled).
+	if len(slash.AvailableCommands) != 3 {
 		t.Fatalf("unexpected commands %+v", slash.AvailableCommands)
 	}
 	names := map[string]bool{}
 	for _, c := range slash.AvailableCommands {
 		names[c.Name] = true
 	}
-	if !names["demo"] || !names["generate-rules"] {
-		t.Fatalf("expected demo and generate-rules, got %+v", slash.AvailableCommands)
+	if !names["demo"] || !names["generate-rules"] || !names["compact"] {
+		t.Fatalf("expected demo, generate-rules, and compact, got %+v", slash.AvailableCommands)
 	}
 }
 

@@ -667,3 +667,102 @@ func TestCompactSessionProviderErrorKeepsHistory(t *testing.T) {
 		t.Fatal("failed compaction must not mutate history")
 	}
 }
+
+// --- compact.go: /compact command interception -------------------------------
+
+func TestParseCompactCommand(t *testing.T) {
+	cases := []struct {
+		in      string
+		wantOK  bool
+		wantArg string
+	}{
+		{in: "/compact", wantOK: true},
+		{in: "  /compact  ", wantOK: true},
+		{in: "/compact focus on file paths", wantOK: true, wantArg: "focus on file paths"},
+		{in: "/compact\nkeep decisions", wantOK: true, wantArg: "keep decisions"},
+		{in: "/compacted", wantOK: false},
+		{in: "hello /compact", wantOK: false},
+		{in: "", wantOK: false},
+	}
+	for _, tc := range cases {
+		arg, ok := parseCompactCommand(tc.in)
+		if ok != tc.wantOK || arg != tc.wantArg {
+			t.Errorf("parseCompactCommand(%q) = (%q, %v), want (%q, %v)", tc.in, arg, ok, tc.wantArg, tc.wantOK)
+		}
+	}
+}
+
+func TestRunCompactCommandDoesNotPersistUserMessage(t *testing.T) {
+	st := seededCompactState(t, 3)
+	keep := 1
+	provider := &compactCannedProvider{t: t, summary: "dense summary"}
+	ag := compactTestAgent(t, st, config.Compaction{KeepRecentTurns: &keep}, provider)
+
+	stop, err := ag.Run(context.Background(), []acp.ContentBlock{{Type: "text", Text: "/compact focus on tests"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stop != string(acp.StopReasonEndTurn) {
+		t.Fatalf("stop = %q", stop)
+	}
+
+	msgs := st.GetMessages()
+	for _, m := range msgs {
+		if strings.Contains(m.Content, "/compact") {
+			t.Fatalf("the /compact command leaked into history: %+v", m)
+		}
+	}
+	if !msgs[4].CompactionSummary {
+		t.Fatalf("summary not inserted at boundary: %+v", msgs[4])
+	}
+	last := msgs[len(msgs)-1]
+	if last.Role != llm.RoleAssistant || !strings.Contains(strings.ToLower(last.Content), "compacted") {
+		t.Fatalf("missing confirmation message: %+v", last)
+	}
+	if len(provider.requests) != 1 || !strings.Contains(transcriptText(provider.requests[0]), "focus on tests") {
+		t.Fatalf("instructions not forwarded to the summarizer: %v", provider.requests)
+	}
+}
+
+func TestRunCompactCommandNothingToCompact(t *testing.T) {
+	st := seededCompactState(t, 1)
+	keep := 2
+	ag := compactTestAgent(t, st, config.Compaction{KeepRecentTurns: &keep}, &compactCannedProvider{t: t, summary: "s"})
+
+	stop, err := ag.Run(context.Background(), []acp.ContentBlock{{Type: "text", Text: "/compact"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stop != string(acp.StopReasonEndTurn) {
+		t.Fatalf("stop = %q", stop)
+	}
+	msgs := st.GetMessages()
+	last := msgs[len(msgs)-1]
+	if last.Role != llm.RoleAssistant || !strings.Contains(last.Content, "Nothing to compact") {
+		t.Fatalf("expected friendly notice, got %+v", last)
+	}
+	for _, m := range msgs {
+		if m.CompactionSummary {
+			t.Fatal("no summary row expected")
+		}
+	}
+}
+
+func TestRunCompactCommandDisabled(t *testing.T) {
+	st := seededCompactState(t, 3)
+	off := false
+	ag := compactTestAgent(t, st, config.Compaction{Enabled: &off}, &compactCannedProvider{t: t, summary: "s"})
+
+	stop, err := ag.Run(context.Background(), []acp.ContentBlock{{Type: "text", Text: "/compact"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stop != string(acp.StopReasonEndTurn) {
+		t.Fatalf("stop = %q", stop)
+	}
+	msgs := st.GetMessages()
+	last := msgs[len(msgs)-1]
+	if last.Role != llm.RoleAssistant || !strings.Contains(strings.ToLower(last.Content), "disabled") {
+		t.Fatalf("expected disabled notice, got %+v", last)
+	}
+}

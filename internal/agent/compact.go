@@ -9,7 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/EvilFreelancer/coddy-agent/internal/acp"
 	"github.com/EvilFreelancer/coddy-agent/internal/llm"
 	"github.com/EvilFreelancer/coddy-agent/internal/session"
 )
@@ -17,6 +19,9 @@ import (
 // ErrNothingToCompact is returned when the history has no full user turn to
 // fold away before the keep-recent boundary.
 var ErrNothingToCompact = errors.New("nothing to compact")
+
+// ErrCompactionDisabled is returned when compaction.enabled is false.
+var ErrCompactionDisabled = errors.New("compaction is disabled (compaction.enabled)")
 
 // CompactionResult reports what a successful compaction did.
 type CompactionResult struct {
@@ -47,7 +52,7 @@ Output plain markdown, no preamble and no closing remarks. Do not invent facts t
 // the summarization request (from the manual compact command arguments).
 func (a *Agent) CompactSession(ctx context.Context, instructions string) (*CompactionResult, error) {
 	if !a.cfg.Compaction.IsEnabled() {
-		return nil, fmt.Errorf("compaction is disabled (compaction.enabled)")
+		return nil, ErrCompactionDisabled
 	}
 
 	msgs := a.state.GetMessages()
@@ -80,6 +85,58 @@ func (a *Agent) CompactSession(ctx context.Context, instructions string) (*Compa
 		KeptMessages:      len(msgs) - splitIdx,
 		Model:             modelID,
 	}, nil
+}
+
+// CompactCommandName is the built-in slash command that triggers compaction.
+const CompactCommandName = "compact"
+
+// CompactCommandDescription is shown in slash-command catalogs.
+const CompactCommandDescription = "Summarize older conversation history to free context; recent turns stay verbatim"
+
+// parseCompactCommand reports whether the prompt text invokes the built-in
+// /compact command and returns the trailing summarizer instructions.
+func parseCompactCommand(text string) (instructions string, ok bool) {
+	t := strings.TrimSpace(text)
+	const cmd = "/" + CompactCommandName
+	if t == cmd {
+		return "", true
+	}
+	for _, sep := range []string{" ", "\t", "\n"} {
+		if rest, found := strings.CutPrefix(t, cmd+sep); found {
+			return strings.TrimSpace(rest), true
+		}
+	}
+	return "", false
+}
+
+// runCompactCommand executes the built-in /compact command for a prompt turn.
+// The command text is never persisted; the outcome is streamed as one agent
+// message chunk and stored as an assistant message so non-streaming surfaces
+// and transcript replay show it.
+func (a *Agent) runCompactCommand(ctx context.Context, instructions string) (string, error) {
+	res, err := a.CompactSession(ctx, instructions)
+	var text string
+	switch {
+	case errors.Is(err, ErrNothingToCompact):
+		text = "Nothing to compact: the conversation still fits within the keep-recent window."
+	case errors.Is(err, ErrCompactionDisabled):
+		text = "Compaction is disabled in the configuration (compaction.enabled: false)."
+	case err != nil:
+		return string(acp.StopReasonRefused), err
+	default:
+		text = fmt.Sprintf("Context compacted: %d message(s) summarized, %d kept verbatim.", res.CompactedMessages, res.KeptMessages)
+	}
+	_ = a.server.SendSessionUpdate(a.state.GetID(), acp.MessageChunkUpdate{
+		SessionUpdate: acp.UpdateTypeAgentMessageChunk,
+		Content:       acp.ContentBlock{Type: acp.ContentTypeText, Text: text},
+	})
+	a.state.AddMessage(llm.Message{
+		Role:      llm.RoleAssistant,
+		Content:   text,
+		Model:     a.state.EffectiveModelID(a.cfg),
+		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+	})
+	return string(acp.StopReasonEndTurn), nil
 }
 
 // compactionProvider resolves the summarizer provider: compaction.model when

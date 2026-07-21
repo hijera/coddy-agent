@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   localFetch,
   setEnv,
@@ -19,6 +25,7 @@ const CUSTOM = "__custom__";
 export function EnvironmentSection() {
   const env = useSyncExternalStore(subscribeEnv, snapshotEnv, snapshotEnv);
   const [remotes, setRemotes] = useState<Remote[]>([]);
+  const [remotesLoaded, setRemotesLoaded] = useState(false);
 
   const initialChoice = env.mode === "remote" ? env.baseUrl : "";
   const [choice, setChoice] = useState<string>(initialChoice);
@@ -53,6 +60,9 @@ export function EnvironmentSection() {
       })
       .catch(() => {
         /* configured remotes are optional; the user can enter a custom URL */
+      })
+      .finally(() => {
+        if (alive) setRemotesLoaded(true);
       });
     return () => {
       alive = false;
@@ -63,19 +73,28 @@ export function EnvironmentSection() {
     () => new Set(remotes.map((r) => r.url)),
     [remotes],
   );
-  // If the active remote is not in the configured list, preselect the custom option.
+  // One-time normalization once the configured remotes have loaded: if the active remote is not in
+  // the list, reflect it as the Custom option (pre-filled). Guarded by a ref so it runs exactly
+  // once and never fights the user's own selection — in particular, choosing Local while connected
+  // to a custom remote must stick, so the user can roam Local <-> Remote freely.
+  const normalizedRef = useRef(false);
   useEffect(() => {
-    if (
-      env.mode === "remote" &&
-      !knownUrls.has(env.baseUrl) &&
-      remotes.length >= 0
-    ) {
-      setChoice((c) => (c === "" && env.baseUrl ? CUSTOM : c));
+    if (normalizedRef.current || !remotesLoaded) return;
+    normalizedRef.current = true;
+    if (env.mode === "remote" && !knownUrls.has(env.baseUrl)) {
+      setCustomUrl(env.baseUrl);
+      setCustomName(env.name ?? "");
+      setChoice(CUSTOM);
     }
-  }, [env, knownUrls, remotes.length]);
+  }, [remotesLoaded, env, knownUrls]);
 
   const isRemoteChoice = choice !== "";
   const targetUrl = choice === CUSTOM ? customUrl.trim() : choice;
+
+  const switchToLocal = () => {
+    setEnv({ mode: "local" });
+    window.location.reload();
+  };
 
   const connect = () => {
     if (!isRemoteChoice) {
@@ -107,6 +126,19 @@ export function EnvironmentSection() {
           ? "Connected to: Local (this origin)"
           : `Connected to: ${env.name ? env.name + " — " : ""}${env.baseUrl}`}
       </p>
+
+      {env.mode === "remote" ? (
+        <div className="settings-row">
+          <button
+            type="button"
+            className="settings-btn"
+            onClick={switchToLocal}
+            data-testid="environment-use-local"
+          >
+            ← Switch back to Local
+          </button>
+        </div>
+      ) : null}
 
       <div className="settings-row">
         <label className="settings-label">

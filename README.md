@@ -2,6 +2,7 @@
   <a href="https://go.dev/doc/go1.25"><img src="https://img.shields.io/badge/go-1.25+-00ADD8?logo=go&logoColor=white" alt="Go 1.25+" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/EvilFreelancer/coddy-agent" alt="MIT License" /></a>
   <a href="https://github.com/EvilFreelancer/coddy-agent/actions/workflows/tests-on-pr.yaml"><img src="https://github.com/EvilFreelancer/coddy-agent/actions/workflows/tests-on-pr.yaml/badge.svg" alt="Tests on PR" /></a>
+  <a href="https://github.com/coddy-project/coddy-agent/releases"><img src="https://img.shields.io/github/v/release/coddy-project/coddy-agent" alt="Latest release" /></a>
   <a href="https://agentclientprotocol.com/"><img src="https://img.shields.io/badge/ACP-harness-9333EA" alt="ACP harness" /></a>
   <img src="https://img.shields.io/badge/distroless%20ready-252525" alt="distroless-ready" />
   <img src="https://img.shields.io/badge/single%20binary-252525" alt="single binary" />
@@ -12,8 +13,8 @@
 </p>
 
 <p align="center">
-  <strong>Run a full general purpose agent from one static Go binary.</strong><br />
-  ReAct, filesystem and shell tools, MCP, Skills, optional OpenAI-compatible API with an embedded UI, scheduler, and long-term memory.
+  <strong>Run a full general-purpose agent from one static Go binary.</strong><br />
+  ReAct, filesystem and shell tools, MCP, skills, OpenAI-compatible API with an embedded web UI, Telegram gateway, cron scheduler, long-term memory, and context compaction.
 </p>
 
 | Desktop (1920×1080) | Mobile (390×844) |
@@ -37,7 +38,7 @@ Screenshots: desktop at **1920×1080**, mobile at **390×844** from the embedded
 
 </details>
 
-Coddy is a distroless-friendly **harness**: drop it into minimal images (`scratch`, `distroless`, read-only workspaces) without a full OS shell. The **`grep`** and **`glob`** filesystem tools use system ripgrep when available and fall back to built-in Go implementations when it is not. The harness layer (ACP RPC, sessions, prompts, providers) stays the same if you tighten the toolset or drive it from automation instead of an IDE. The design also targets **container fleets** - many Coddy instances in Docker (orchestrator-defined limits, read-only rootfs, mounted workspace) with **full control of each container**, similar in spirit to agent OS / swarm-style agents, not a single shared chat pool.
+Coddy is a distroless-friendly **harness**: drop it into minimal images (`scratch`, `distroless`, read-only workspaces) without a full OS shell. The same agent core is reachable from an IDE over **ACP**, a browser or any OpenAI client over **HTTP**, **Telegram** through the messenger gateway, and cron through the **scheduler**. The **`grep`** and **`glob`** filesystem tools use system ripgrep when available and fall back to built-in Go implementations when it is not. The harness layer (ACP RPC, sessions, prompts, providers) stays the same if you tighten the toolset or drive it from automation instead of an IDE. The design also targets **container fleets** - many Coddy instances in Docker (orchestrator-defined limits, read-only rootfs, mounted workspace) with **full control of each container**, similar in spirit to agent OS / swarm-style agents, not a single shared chat pool.
 
 ## Contents
 

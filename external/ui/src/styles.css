@@ -5883,7 +5883,9 @@ textarea#composer {
   border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, var(--coddy-blend-base));
 }
 
-.skills-list-item.is-disabled {
+/* Dim the label/icon of a disabled skill but keep its on/off switch crisp. */
+.skills-list-item.is-disabled > svg,
+.skills-list-item.is-disabled .skills-list-item-text {
   opacity: 0.5;
 }
 
@@ -5911,10 +5913,43 @@ textarea#composer {
   white-space: nowrap;
 }
 
-.skills-list-item-toggle {
+/* iOS-style on/off switch for enabling/disabling a skill. */
+.skill-switch {
+  position: relative;
   flex: 0 0 auto;
-  font-size: 0.75rem;
-  padding: 4px 10px;
+  width: 38px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 24%, transparent);
+  cursor: pointer;
+  transition: background 0.16s ease;
+}
+
+.skill-switch[aria-checked="true"] {
+  background: #34c759;
+}
+
+.skill-switch:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.skill-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  transition: transform 0.16s ease;
+}
+
+.skill-switch[aria-checked="true"] .skill-switch-thumb {
+  transform: translateX(16px);
 }
 
 .skills-list-item-badge {
@@ -5943,17 +5978,10 @@ textarea#composer {
 }
 
 /* Per-skill Update action (icon + label), only shown when an update exists. */
+/* Per-skill icon actions (Update / Delete) keep their square icon-button size
+   from .settings-btn-icon; only the flex placement is set here. */
 .skills-update-btn {
   flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 0.75rem;
-  padding: 4px 10px;
-}
-
-.skills-update-btn > svg {
-  flex-shrink: 0;
 }
 
 /* "Installed skills" heading row with the Refresh action on the right. */
@@ -5971,67 +5999,12 @@ textarea#composer {
 
 .skills-refresh-btn {
   flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 0.75rem;
-  padding: 4px 10px;
 }
-
-.skills-refresh-btn > svg {
-  flex-shrink: 0;
-}
-
-/* Configured marketplace sources, each with a remove control. */
-.skills-source-list {
-  list-style: none;
-  margin: 0 0 4px;
-  padding: 0;
+/* Sync action attached to the schema-driven Remote skill sources box above. */
+.skills-sources-actions {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.skills-source-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--text) 5%, var(--coddy-blend-base));
-}
-
-.skills-source-item-name {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: 0.78rem;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.skills-source-item-remove {
-  flex: 0 0 auto;
-  font-size: 0.72rem;
-  padding: 2px 8px;
-}
-
-/* Add-source / sync controls above the installed list. */
-.settings-skills-source-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.settings-skills-source-row .settings-input {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.settings-skills-source-row .settings-btn {
-  flex: 0 0 auto;
+  justify-content: flex-end;
+  margin: -4px 0 4px;
 }
 
 @media (max-width: 1199px) {

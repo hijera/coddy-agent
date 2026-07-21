@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { SchemaForm, type JsonSchema } from "./SchemaForm";
+import { SchemaForm, IconTrash, type JsonSchema } from "./SchemaForm";
 
 type InstalledSkill = {
   name: string;
@@ -22,13 +22,6 @@ async function fetchInstalled(): Promise<InstalledSkill[]> {
   const res = await fetch("/coddy/skills");
   if (!res.ok) return [];
   const data = (await res.json()) as { items?: InstalledSkill[] };
-  return data.items ?? [];
-}
-
-async function fetchSources(): Promise<string[]> {
-  const res = await fetch("/coddy/skills/sources");
-  if (!res.ok) return [];
-  const data = (await res.json()) as { items?: string[] };
   return data.items ?? [];
 }
 
@@ -72,12 +65,14 @@ function IconPlug() {
   );
 }
 
-function IconRefresh() {
+function IconSync() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-      <polyline points="21 3 21 9 15 9" />
+      <path d="M21 2v6h-6" />
+      <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+      <path d="M3 22v-6h6" />
+      <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
     </svg>
   );
 }
@@ -94,10 +89,12 @@ function IconUpdate() {
 }
 
 /**
- * SkillsSection is the combined Skills tab: the schema-driven `skills.dirs`
- * editor, remote marketplace source management (add / list / remove / sync),
- * and the installed-skills list with versions, enable/disable, remove, and a
- * per-skill Update action shown when a newer version is available upstream.
+ * SkillsSection is the combined Skills tab: the schema-driven `skills.dirs` /
+ * `skills.sources` editor (adding, listing, and removing remote sources is the
+ * generic array editor rendered by SchemaForm — no duplicate control here),
+ * a Sync action that fetches the configured sources, and the installed-skills
+ * list with versions, enable/disable, delete, and a per-skill Update action
+ * shown when a newer version is available upstream.
  */
 export function SkillsSection(props: {
   schema: JsonSchema;
@@ -106,21 +103,16 @@ export function SkillsSection(props: {
 }) {
   const { schema, value, onChange } = props;
   const [installed, setInstalled] = useState<InstalledSkill[]>([]);
-  const [sources, setSources] = useState<string[]>([]);
   const [updates, setUpdates] = useState<Record<string, SkillUpdate>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [sourceInput, setSourceInput] = useState("");
   const [syncing, setSyncing] = useState(false);
-  const [checking, setChecking] = useState(false);
 
   const loadInstalled = useCallback(async () => {
     setLoading(true);
-    const [data, srcs] = await Promise.all([fetchInstalled(), fetchSources()]);
-    setInstalled(data);
-    setSources(srcs);
+    setInstalled(await fetchInstalled());
     setLoading(false);
   }, []);
 
@@ -157,7 +149,7 @@ export function SkillsSection(props: {
     void (async () => {
       const res = await apiSend(`/coddy/skills/${encodeURIComponent(skill.name)}`, "DELETE");
       if (!res.ok) {
-        setError(res.error || "Failed to remove");
+        setError(res.error || "Failed to delete");
       } else {
         await loadInstalled();
       }
@@ -182,6 +174,9 @@ export function SkillsSection(props: {
     })();
   };
 
+  // One action: fetch every configured source in skills.sources, then refresh
+  // the installed list and re-check versions. (Save the settings first so newly
+  // added sources are persisted before syncing.)
   const onSync = () => {
     setSyncing(true);
     setError(null);
@@ -198,138 +193,27 @@ export function SkillsSection(props: {
     })();
   };
 
-  // Refresh the installed list and check every source for newer versions.
-  const onRefresh = () => {
-    setChecking(true);
-    setError(null);
-    setStatus(null);
-    void (async () => {
-      await loadInstalled();
-      await refreshUpdates();
-      setStatus("Skill list refreshed.");
-      setChecking(false);
-    })();
-  };
-
-  const onAddSource = () => {
-    const source = sourceInput.trim();
-    if (!source) return;
-    setSyncing(true);
-    setError(null);
-    setStatus(null);
-    void (async () => {
-      const res = await apiSend("/coddy/skills/sources", "POST", { source, sync: true });
-      if (!res.ok) setError(res.error || "Failed to add source");
-      else {
-        setSourceInput("");
-        setStatus(`Added and synced ${source}.`);
-        await loadInstalled();
-        await refreshUpdates();
-      }
-      setSyncing(false);
-    })();
-  };
-
-  const onRemoveSource = (source: string) => {
-    setSyncing(true);
-    setError(null);
-    setStatus(null);
-    void (async () => {
-      const res = await apiSend(`/coddy/skills/sources?source=${encodeURIComponent(source)}`, "DELETE");
-      if (!res.ok) setError(res.error || "Failed to remove source");
-      else {
-        setStatus(`Removed source ${source}.`);
-        await loadInstalled();
-      }
-      setSyncing(false);
-    })();
-  };
-
   return (
     <div className="settings-skills-section">
       <SchemaForm schema={schema} value={value} onChange={onChange} />
 
-      <p className="appearance-section-label settings-skills-installed-label">
-        Remote skill sources
-      </p>
-      <p className="settings-field-desc">
-        Install skills from a GitHub repo (<code>owner/repo</code>), a git URL, or an{" "}
-        <a href="https://agents.md" target="_blank" rel="noreferrer">agents-standard</a>{" "}
-        <code>marketplace.json</code> URL. Sources are saved to <code>skills.sources</code> and
-        fetched only when you sync.
-      </p>
-      <div className="settings-skills-source-row">
-        <input
-          className="settings-input"
-          type="text"
-          placeholder="owner/repo  ·  https://…/marketplace.json"
-          value={sourceInput}
-          onChange={(e) => setSourceInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              onAddSource();
-            }
-          }}
-          disabled={syncing}
-          data-testid="skills-source-input"
-        />
+      <div className="skills-sources-actions">
         <button
           type="button"
-          className="settings-btn settings-btn-primary"
-          disabled={syncing || !sourceInput.trim()}
-          onClick={onAddSource}
-        >
-          Add &amp; sync
-        </button>
-        <button
-          type="button"
-          className="settings-btn"
-          disabled={syncing}
+          className="settings-btn settings-btn-icon skills-sync-btn"
+          disabled={syncing || loading}
           onClick={onSync}
-          title="Fetch all configured sources"
+          title="Sync — fetch the remote skill sources and refresh the list"
+          aria-label="Sync remote skill sources"
+          data-testid="skills-sync"
         >
-          {syncing ? "Syncing…" : "Sync"}
+          <IconSync />
         </button>
       </div>
 
-      {sources.length > 0 ? (
-        <ul className="skills-source-list" data-testid="skills-source-list">
-          {sources.map((src) => (
-            <li key={src} className="skills-source-item">
-              <span className="skills-source-item-name" title={src}>{src}</span>
-              <button
-                type="button"
-                className="settings-btn settings-btn-danger skills-source-item-remove"
-                disabled={syncing}
-                onClick={() => onRemoveSource(src)}
-                title={`Remove source ${src}`}
-                aria-label={`Remove source ${src}`}
-              >
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      <div className="skills-installed-header">
-        <p className="appearance-section-label settings-skills-installed-label">
-          Installed skills
-        </p>
-        <button
-          type="button"
-          className="settings-btn skills-refresh-btn"
-          disabled={checking || loading}
-          onClick={onRefresh}
-          title="Refresh the skill list and check sources for newer versions"
-          aria-label="Refresh skills and check for updates"
-          data-testid="skills-refresh"
-        >
-          <IconRefresh />
-          <span>{checking ? "Checking…" : "Refresh"}</span>
-        </button>
-      </div>
+      <p className="appearance-section-label settings-skills-installed-label">
+        Installed skills
+      </p>
       <p className="settings-field-desc">
         You can also install skills via <code>npx skills</code> or <code>npx skillsbd</code> — they
         land in <code>~/.agents/skills/</code> and are picked up automatically.
@@ -373,7 +257,7 @@ export function SkillsSection(props: {
                 {hasUpdate ? (
                   <button
                     type="button"
-                    className="settings-btn settings-btn-primary skills-update-btn"
+                    className="settings-btn settings-btn-icon settings-btn-primary skills-update-btn"
                     disabled={!!busy[sk.name]}
                     onClick={() => onUpdateSkill(sk)}
                     title={`Update ${sk.name} from v${upd?.version || sk.version || "?"} to v${upd?.latest}`}
@@ -381,27 +265,32 @@ export function SkillsSection(props: {
                     data-testid={`skills-update-${sk.name}`}
                   >
                     <IconUpdate />
-                    <span>Update</span>
                   </button>
                 ) : null}
                 <button
                   type="button"
-                  className="settings-btn skills-list-item-toggle"
+                  role="switch"
+                  aria-checked={sk.enabled}
+                  className="skill-switch"
                   disabled={!!busy[sk.name]}
                   onClick={() => onToggle(sk)}
-                  title={sk.enabled ? "Disable" : "Enable"}
+                  title={sk.enabled ? "Enabled — click to disable" : "Disabled — click to enable"}
+                  aria-label={`${sk.enabled ? "Disable" : "Enable"} ${sk.name}`}
+                  data-testid={`skills-toggle-${sk.name}`}
                 >
-                  {sk.enabled ? "Disable" : "Enable"}
+                  <span className="skill-switch-thumb" />
                 </button>
                 {sk.source ? (
                   <button
                     type="button"
-                    className="settings-btn settings-btn-danger skills-list-item-toggle"
+                    className="settings-btn settings-btn-icon settings-btn-danger"
                     disabled={!!busy[sk.name]}
                     onClick={() => onRemove(sk)}
-                    title="Remove synced skill"
+                    title="Delete"
+                    aria-label={`Delete ${sk.name}`}
+                    data-testid={`skills-delete-${sk.name}`}
                   >
-                    Remove
+                    <IconTrash />
                   </button>
                 ) : null}
               </li>

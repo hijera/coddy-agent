@@ -36,6 +36,7 @@ type SessionState interface {
 	EffectiveReasoning(cfg *config.Config) string
 	AddMessage(msg llm.Message)
 	GetMessages() []llm.Message
+	InsertCompactionSummary(idx int, msg llm.Message)
 	GetMCPClients() []*mcp.Client
 	GetSkills() []*skills.Skill
 	GetAgentMemory() string
@@ -661,7 +662,9 @@ func (a *Agent) callMCPTool(ctx context.Context, serverName, toolName, argsJSON 
 // so the LLM sees the full skill instructions immediately before the user's request.
 // The stored history content is never modified — only the slice sent to the LLM differs.
 func (a *Agent) buildMessages(systemPrompt string) []llm.Message {
-	history := a.state.GetMessages()
+	// After a compaction only the last summary and the messages after it are
+	// replayed to the LLM; earlier history stays in the transcript for the UI.
+	history := session.MessagesForLLM(a.state.GetMessages())
 	allSkills := a.state.GetSkills()
 	msgs := make([]llm.Message, 0, len(history)+1)
 	msgs = append(msgs, llm.Message{Role: llm.RoleSystem, Content: systemPrompt})

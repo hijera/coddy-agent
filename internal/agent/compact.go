@@ -139,6 +139,47 @@ func (a *Agent) runCompactCommand(ctx context.Context, instructions string) (str
 	return string(acp.StopReasonEndTurn), nil
 }
 
+// maybeAutoCompact runs compaction when the estimated context usage reached
+// compaction.threshold_percent of the effective model's max_context_tokens.
+// It is fail-open: any error (including nothing-to-compact right after a
+// previous compaction) leaves the turn running uncompacted. Returns true when
+// history was compacted and the outgoing message slice must be rebuilt.
+func (a *Agent) maybeAutoCompact(ctx context.Context) bool {
+	comp := &a.cfg.Compaction
+	if !comp.IsEnabled() {
+		return false
+	}
+	ent := a.cfg.FindModelEntry(a.state.EffectiveModelID(a.cfg))
+	if ent == nil || ent.MaxContextTokens <= 0 {
+		return false
+	}
+	rs, ok := a.state.(rulesState)
+	if !ok {
+		return false
+	}
+	b := rs.GetLastContextBreakdown()
+	if b == nil || b.EstimatedTotal <= 0 {
+		return false
+	}
+	if b.EstimatedTotal*100 < comp.EffectiveThresholdPercent()*ent.MaxContextTokens {
+		return false
+	}
+	res, err := a.CompactSession(ctx, "")
+	if err != nil {
+		if !errors.Is(err, ErrNothingToCompact) {
+			a.log.Warn("auto-compaction failed; continuing uncompacted", "error", err)
+		}
+		return false
+	}
+	a.log.Info("auto-compacted session context",
+		"estimatedTokens", b.EstimatedTotal,
+		"maxContextTokens", ent.MaxContextTokens,
+		"thresholdPercent", comp.EffectiveThresholdPercent(),
+		"compactedMessages", res.CompactedMessages,
+		"keptMessages", res.KeptMessages)
+	return true
+}
+
 // compactionProvider resolves the summarizer provider: compaction.model when
 // set, otherwise the session's effective model.
 func (a *Agent) compactionProvider() (llm.Provider, string, error) {

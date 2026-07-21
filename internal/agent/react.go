@@ -67,6 +67,9 @@ type Agent struct {
 
 // NewAgent creates an Agent for a prompt turn.
 func NewAgent(cfg *config.Config, state SessionState, server acp.UpdateSender, log *slog.Logger) *Agent {
+	if log == nil {
+		log = slog.Default()
+	}
 	environment := platform.CurrentEnvironment()
 	return &Agent{
 		cfg:             cfg,
@@ -144,6 +147,12 @@ func (a *Agent) Run(ctx context.Context, prompt []acp.ContentBlock) (string, err
 
 	// Build the full message list starting with system prompt (refreshed each ReAct turn).
 	messages := a.buildMessages(a.buildSystemPrompt(mode, activeSkills, toolDefs, userText, contextFiles))
+
+	// buildSystemPrompt refreshed the context breakdown; compact before the
+	// first LLM call when the estimate crossed the auto-compaction threshold.
+	if a.maybeAutoCompact(ctx) {
+		messages = a.buildMessages(a.buildSystemPrompt(mode, activeSkills, toolDefs, userText, contextFiles))
+	}
 
 	maxTurns := a.cfg.Agent.MaxTurns
 	if maxTurns <= 0 {
@@ -227,6 +236,15 @@ func (a *Agent) runReActLoop(
 		// state after coddy_todo_* tools in the same user turn.
 		if len(messages) > 0 && messages[0].Role == llm.RoleSystem {
 			messages[0].Content = a.buildSystemPrompt(mode, activeSkills, toolDefs, userText, contextFiles)
+		}
+
+		// Tool results can grow the context mid-turn; compact between LLM calls
+		// when the refreshed estimate crossed the threshold. Run already checked
+		// before the first call. Ephemeral continuation nudges are not part of
+		// persisted state and are dropped by the rebuild (acceptable: the model
+		// answered or called a tool since then).
+		if turn > 0 && a.maybeAutoCompact(ctx) {
+			messages = a.buildMessages(a.buildSystemPrompt(mode, activeSkills, toolDefs, userText, contextFiles))
 		}
 
 		// Call LLM and stream response.

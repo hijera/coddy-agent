@@ -85,6 +85,12 @@ func (s *compactHTTPFeatureState) close() {
 }
 
 func (s *compactHTTPFeatureState) startServer() error {
+	return s.startServerWithContextWindow(0)
+}
+
+// startServerWithContextWindow boots the test server; maxContextTokens > 0
+// arms auto-compaction against that model context window.
+func (s *compactHTTPFeatureState) startServerWithContextWindow(maxContextTokens int) error {
 	sessRoot := filepath.Join(s.root, "sessions")
 	if err := os.MkdirAll(sessRoot, 0o755); err != nil {
 		return err
@@ -92,7 +98,7 @@ func (s *compactHTTPFeatureState) startServer() error {
 	cfg := &config.Config{
 		Paths:     config.Paths{Home: filepath.Join(s.root, "home"), CWD: s.root},
 		Providers: []config.ProviderConfig{{Name: "fake", Type: "openai", APIKey: "test"}},
-		Models:    []config.ModelEntry{{Model: "fake/model", MaxTokens: 100, Temperature: 0.2}},
+		Models:    []config.ModelEntry{{Model: "fake/model", MaxTokens: 100, Temperature: 0.2, MaxContextTokens: maxContextTokens}},
 		Agent:     config.Agent{Model: "fake/model"},
 	}
 	fakeFactory := func(llm.ProviderInput) (llm.Provider, error) {

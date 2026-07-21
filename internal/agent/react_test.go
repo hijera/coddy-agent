@@ -766,3 +766,134 @@ func TestRunCompactCommandDisabled(t *testing.T) {
 		t.Fatalf("expected disabled notice, got %+v", last)
 	}
 }
+
+// --- compact.go: auto-compaction at the context threshold --------------------
+
+func TestMaybeAutoCompactThresholdBoundary(t *testing.T) {
+	cases := []struct {
+		name        string
+		est         int
+		maxContext  int
+		enabled     bool
+		wantCompact bool
+	}{
+		{name: "exactly at threshold", est: 80, maxContext: 100, enabled: true, wantCompact: true},
+		{name: "below threshold", est: 79, maxContext: 100, enabled: true, wantCompact: false},
+		{name: "above threshold", est: 95, maxContext: 100, enabled: true, wantCompact: true},
+		{name: "no context window", est: 1000, maxContext: 0, enabled: true, wantCompact: false},
+		{name: "disabled", est: 1000, maxContext: 100, enabled: false, wantCompact: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			st := seededCompactState(t, 3)
+			keep := 1
+			comp := config.Compaction{KeepRecentTurns: &keep}
+			if !tc.enabled {
+				off := false
+				comp.Enabled = &off
+			}
+			provider := &compactCannedProvider{t: t, summary: "auto summary"}
+			ag := compactTestAgent(t, st, comp, provider)
+			ag.cfg.Models[0].MaxContextTokens = tc.maxContext
+			st.SetLastContextBreakdown(&session.ContextBreakdown{EstimatedTotal: tc.est})
+
+			got := ag.maybeAutoCompact(context.Background())
+			if got != tc.wantCompact {
+				t.Fatalf("maybeAutoCompact = %v, want %v", got, tc.wantCompact)
+			}
+			hasSummary := false
+			for _, m := range st.GetMessages() {
+				if m.CompactionSummary {
+					hasSummary = true
+				}
+			}
+			if hasSummary != tc.wantCompact {
+				t.Fatalf("summary row present = %v, want %v", hasSummary, tc.wantCompact)
+			}
+		})
+	}
+}
+
+func TestMaybeAutoCompactFailOpen(t *testing.T) {
+	st := seededCompactState(t, 3)
+	keep := 1
+	provider := &compactCannedProvider{t: t, err: errors.New("summarizer down")}
+	ag := compactTestAgent(t, st, config.Compaction{KeepRecentTurns: &keep}, provider)
+	ag.cfg.Models[0].MaxContextTokens = 100
+	st.SetLastContextBreakdown(&session.ContextBreakdown{EstimatedTotal: 90})
+
+	if ag.maybeAutoCompact(context.Background()) {
+		t.Fatal("failed compaction must report false")
+	}
+	if len(st.GetMessages()) != 6 {
+		t.Fatal("history must stay untouched on failure")
+	}
+}
+
+// autoCompactRunProvider serves Complete (summary) and Stream (answer),
+// recording stream requests so the test can assert the post-compaction window.
+type autoCompactRunProvider struct {
+	streamSeen [][]llm.Message
+}
+
+func (p *autoCompactRunProvider) Complete(context.Context, []llm.Message, []llm.ToolDefinition) (*llm.Response, error) {
+	return &llm.Response{Content: "auto summary", StopReason: "end_turn"}, nil
+}
+
+func (p *autoCompactRunProvider) Stream(_ context.Context, messages []llm.Message, _ []llm.ToolDefinition, onChunk func(llm.StreamChunk)) (*llm.Response, error) {
+	p.streamSeen = append(p.streamSeen, append([]llm.Message(nil), messages...))
+	onChunk(llm.StreamChunk{TextDelta: "post-auto answer"})
+	return &llm.Response{Content: "post-auto answer", StopReason: "end_turn"}, nil
+}
+
+func TestRunAutoCompactsBeforeFirstLLMCall(t *testing.T) {
+	st := seededCompactState(t, 3)
+	provider := &autoCompactRunProvider{}
+	ag := NewAgent(&config.Config{
+		Providers: []config.ProviderConfig{{Name: "fake", Type: "openai", APIKey: "test"}},
+		// Tiny window: the system prompt alone exceeds 80% of 50 tokens.
+		Models: []config.ModelEntry{{Model: "fake/model", MaxTokens: 100, MaxContextTokens: 50}},
+		Agent:  config.Agent{Model: "fake/model"},
+	}, st, resumePermissionSender{}, nil)
+	ag.providerFactory = func(llm.ProviderInput) (llm.Provider, error) {
+		return provider, nil
+	}
+
+	stop, err := ag.Run(context.Background(), []acp.ContentBlock{{Type: "text", Text: "continue please"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stop != string(acp.StopReasonEndTurn) {
+		t.Fatalf("stop = %q", stop)
+	}
+
+	hasSummary := false
+	for _, m := range st.GetMessages() {
+		if m.CompactionSummary {
+			hasSummary = true
+		}
+	}
+	if !hasSummary {
+		t.Fatal("auto-compaction did not insert a summary row")
+	}
+	if len(provider.streamSeen) == 0 {
+		t.Fatal("no stream request recorded")
+	}
+	first := provider.streamSeen[0]
+	sawSummary := false
+	for _, m := range first {
+		if m.Role == llm.RoleSystem {
+			continue
+		}
+		if m.CompactionSummary {
+			sawSummary = true
+			break
+		}
+		// Any non-summary history message before the summary means the window
+		// was not rebuilt after compaction.
+		t.Fatalf("first LLM request does not start from the summary: %+v", m)
+	}
+	if !sawSummary {
+		t.Fatal("summary missing from the first LLM request")
+	}
+}

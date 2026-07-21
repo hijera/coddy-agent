@@ -40,6 +40,15 @@ func (c *Compaction) IsEnabled() bool {
 	return c.Enabled == nil || *c.Enabled
 }
 
+// EffectiveThresholdPercent returns threshold_percent with the default applied
+// (covers configs constructed without ApplyDefaults).
+func (c *Compaction) EffectiveThresholdPercent() int {
+	if c.ThresholdPercent <= 0 {
+		return CompactionDefaultThresholdPercent
+	}
+	return c.ThresholdPercent
+}
+
 // EffectiveKeepRecentTurns returns keep_recent_turns with the default applied.
 func (c *Compaction) EffectiveKeepRecentTurns() int {
 	if c.KeepRecentTurns == nil {

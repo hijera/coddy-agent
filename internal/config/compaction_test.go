@@ -18,6 +18,9 @@ func TestCompactionDefaults(t *testing.T) {
 	if got := c.EffectiveKeepRecentTurns(); got != CompactionDefaultKeepRecentTurns {
 		t.Fatalf("keep_recent_turns = %d, want %d", got, CompactionDefaultKeepRecentTurns)
 	}
+	if (&Compaction{}).EffectiveThresholdPercent() != CompactionDefaultThresholdPercent {
+		t.Fatal("EffectiveThresholdPercent must default without ApplyDefaults")
+	}
 }
 
 func TestCompactionExplicitValuesSurviveDefaults(t *testing.T) {

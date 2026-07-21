@@ -5913,12 +5913,13 @@ textarea#composer {
   white-space: nowrap;
 }
 
-/* iOS-style on/off switch for enabling/disabling a skill. */
+/* Theme-aware on/off switch for enabling/disabling a skill. Sized to sit level
+   with the 40px icon buttons (Update / Delete) in the same row. */
 .skill-switch {
   position: relative;
   flex: 0 0 auto;
-  width: 38px;
-  height: 22px;
+  width: 46px;
+  height: 26px;
   padding: 0;
   border: none;
   border-radius: 999px;
@@ -5928,7 +5929,7 @@ textarea#composer {
 }
 
 .skill-switch[aria-checked="true"] {
-  background: #34c759;
+  background: var(--accent);
 }
 
 .skill-switch:disabled {
@@ -5938,10 +5939,10 @@ textarea#composer {
 
 .skill-switch-thumb {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 18px;
-  height: 18px;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
@@ -5949,7 +5950,7 @@ textarea#composer {
 }
 
 .skill-switch[aria-checked="true"] .skill-switch-thumb {
-  transform: translateX(16px);
+  transform: translateX(20px);
 }
 
 .skills-list-item-badge {
@@ -5985,26 +5986,24 @@ textarea#composer {
 }
 
 /* "Installed skills" heading row with the Refresh action on the right. */
-.skills-installed-header {
+/* Footer of the Remote skill sources box: Add on the left, Sync all on the
+   right, on one level (matches the SchemaForm array's Add position). */
+.skills-sources-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 8px;
 }
 
-.skills-installed-header .settings-skills-installed-label {
-  margin: 0;
+.skills-sync-all-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.skills-refresh-btn {
-  flex: 0 0 auto;
-}
-/* Sync action attached to the schema-driven Remote skill sources box above. */
-.skills-sources-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin: -4px 0 4px;
+.skills-sync-all-btn > svg {
+  flex-shrink: 0;
 }
 
 @media (max-width: 1199px) {

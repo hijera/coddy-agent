@@ -34,7 +34,7 @@ func parsePluginCommand(text string) (args []string, ok bool) {
 // call), shares the dispatcher with the CLI, and surfaces the result as an
 // assistant message. The command text itself never enters the transcript.
 func (a *Agent) runPluginCommand(ctx context.Context, args []string) (string, error) {
-	out, err := skills.RunPluginCommand(ctx, a.cfg, args)
+	out, err := skills.RunPluginCommand(ctx, a.cfg, a.state.GetCWD(), args)
 	text := out
 	if err != nil {
 		text = err.Error()

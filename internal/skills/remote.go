@@ -170,6 +170,113 @@ func Sync(ctx context.Context, cfg *config.Config) (*SyncResult, error) {
 	return res, nil
 }
 
+// SyncSource fetches a single source (a GitHub owner/repo, git URL, or
+// marketplace.json URL) and materializes its skills, independent of whether the
+// source is listed in skills.sources. Backs `plugin marketplace sync <src>`.
+func SyncSource(ctx context.Context, cfg *config.Config, source string) (*SyncResult, error) {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return nil, fmt.Errorf("empty source")
+	}
+	if _, err := parseSource(source); err != nil {
+		return nil, err
+	}
+	syncMu.Lock()
+	defer syncMu.Unlock()
+	managedDir := cfg.Skills.ManagedDir(cfg.Paths.Home)
+	if err := os.MkdirAll(managedDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create managed dir: %w", err)
+	}
+	lock := readRemoteLock(managedDir)
+	res := &SyncResult{}
+	if err := syncOne(ctx, source, managedDir, lock, res); err != nil {
+		res.Failed = append(res.Failed, SyncFailure{Source: source, Error: err.Error()})
+	}
+	if err := writeRemoteLock(managedDir, lock); err != nil {
+		return res, fmt.Errorf("write lock: %w", err)
+	}
+	return res, nil
+}
+
+// SkillReadonly reports whether a loaded skill cannot be deleted from disk
+// (bundled skills carry a relative virtual FilePath; everything the loader found
+// on disk is absolute and therefore removable).
+func SkillReadonly(sk *Skill) bool {
+	return sk == nil || !filepath.IsAbs(sk.FilePath)
+}
+
+// DeleteSkill removes any on-disk skill by canonical name (not just remote ones),
+// with its remote lock entry when present. Bundled skills are read-only and
+// cannot be deleted. cwd expands ${CWD} in skills.dirs for lookup.
+func DeleteSkill(cfg *config.Config, cwd, skillName string) error {
+	name, err := sanitizeSkillName(skillName)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(cwd) == "" {
+		cwd = "."
+	}
+	syncMu.Lock()
+	defer syncMu.Unlock()
+	managedDir := cfg.Skills.ManagedDir(cfg.Paths.Home)
+
+	loader := NewLoader(cfg.Skills.Dirs)
+	loaded, err := loader.LoadAll(cwd, cfg.Paths.Home, managedDir)
+	if err != nil {
+		return err
+	}
+	var target *Skill
+	for _, sk := range loaded {
+		if CanonicalCommandName(sk) == name {
+			target = sk
+			break
+		}
+	}
+	if target == nil {
+		return fmt.Errorf("skill %q not found", name)
+	}
+	if SkillReadonly(target) {
+		return fmt.Errorf("skill %q is read-only (bundled) and cannot be deleted", name)
+	}
+	victim, err := skillDeletePath(cfg, cwd, target.FilePath)
+	if err != nil {
+		return err
+	}
+	if err := os.RemoveAll(victim); err != nil {
+		return fmt.Errorf("remove skill: %w", err)
+	}
+	if lock := readRemoteLock(managedDir); lock != nil {
+		if _, ok := lock[name]; ok {
+			delete(lock, name)
+			_ = writeRemoteLock(managedDir, lock)
+		}
+	}
+	return nil
+}
+
+// skillDeletePath resolves what to remove for a skill file: its containing
+// directory for a `<dir>/SKILL.md`, or the file itself for a root `.md`/`.mdc`.
+// It refuses paths that are not strictly inside a configured skills directory.
+func skillDeletePath(cfg *config.Config, cwd, filePath string) (string, error) {
+	base := filepath.Base(filePath)
+	stem := strings.TrimSuffix(base, filepath.Ext(base))
+	victim := filePath
+	if strings.EqualFold(stem, "SKILL") {
+		victim = filepath.Dir(filePath)
+	}
+	victim = filepath.Clean(victim)
+	for _, d := range cfg.Skills.Dirs {
+		root := filepath.Clean(ExpandConfiguredPath(d, cwd, cfg.Paths.Home))
+		if victim == root {
+			return "", fmt.Errorf("refusing to delete the skills directory itself")
+		}
+		if strings.HasPrefix(victim, root+string(filepath.Separator)) {
+			return victim, nil
+		}
+	}
+	return "", fmt.Errorf("refusing to delete skill outside configured skill directories")
+}
+
 func syncOne(ctx context.Context, src, managedDir string, lock map[string]RemoteEntry, res *SyncResult) error {
 	spec, err := parseSource(src)
 	if err != nil {

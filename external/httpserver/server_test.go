@@ -2502,3 +2502,84 @@ func TestCoddySkillsNewRoutesEdgeCases(t *testing.T) {
 		t.Fatalf("delete source without query status %d, want 400", delRes.StatusCode)
 	}
 }
+
+// TestCoddySkillsDeleteAnyAndReadonly covers the delete-any-skill behaviour:
+// bundled skills are read-only (row flag + 400 on delete), on-disk skills delete.
+func TestCoddySkillsDeleteAnyAndReadonly(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CODDY_HOME", home)
+	skillsDir := filepath.Join(home, "skills")
+	// A deletable on-disk skill.
+	if err := os.MkdirAll(filepath.Join(skillsDir, "local"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillsDir, "local", "SKILL.md"), []byte("---\nname: local\ndescription: d\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfgPath := filepath.Join(home, "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte("skills:\n  dirs:\n    - "+skillsDir+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := func(context.Context, *session.State, []acp.ContentBlock, acp.UpdateSender) (string, error) {
+		return "", nil
+	}
+	mgr := session.NewManager(cfg, noopSender{}, runner, slog.Default(), home, nil)
+	srv := New(cfg, mgr, slog.Default(), home)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	// GET rows: the bundled skill is read-only, the on-disk one is not.
+	res, err := http.Get(ts.URL + "/coddy/skills")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := ioReadAllClose(res.Body)
+	var list struct {
+		Items []struct {
+			Name     string `json:"name"`
+			Readonly bool   `json:"readonly"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(body, &list); err != nil {
+		t.Fatalf("list body %s: %v", body, err)
+	}
+	ro := map[string]bool{}
+	for _, it := range list.Items {
+		ro[it.Name] = it.Readonly
+	}
+	if !ro["generate-rules"] {
+		t.Errorf("bundled generate-rules should be read-only")
+	}
+	if ro["local"] {
+		t.Errorf("on-disk local skill should be deletable")
+	}
+
+	// Deleting the bundled skill fails with 400.
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/coddy/skills/generate-rules", nil)
+	dr, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = ioReadAllClose(dr.Body)
+	if dr.StatusCode != http.StatusBadRequest {
+		t.Fatalf("delete bundled status %d, want 400", dr.StatusCode)
+	}
+
+	// Deleting the on-disk skill succeeds and removes it.
+	req2, _ := http.NewRequest(http.MethodDelete, ts.URL+"/coddy/skills/local", nil)
+	dr2, err := http.DefaultClient.Do(req2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = ioReadAllClose(dr2.Body)
+	if dr2.StatusCode != http.StatusOK {
+		t.Fatalf("delete on-disk status %d, want 200", dr2.StatusCode)
+	}
+	if _, err := os.Stat(filepath.Join(skillsDir, "local")); !os.IsNotExist(err) {
+		t.Errorf("local skill dir should be gone: %v", err)
+	}
+}

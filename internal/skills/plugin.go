@@ -104,7 +104,7 @@ func probeSource(ctx context.Context, src string) SourceStatus {
 // (`coddy plugin ...`) and the chat `/plugin` command. args are the tokens
 // after `plugin` / `/plugin`. It returns human-readable output; a non-nil error
 // signals a usage or execution failure the caller surfaces to the user.
-func RunPluginCommand(ctx context.Context, cfg *config.Config, args []string) (string, error) {
+func RunPluginCommand(ctx context.Context, cfg *config.Config, cwd string, args []string) (string, error) {
 	args = trimTokens(args)
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
 		return pluginUsage(), nil
@@ -121,10 +121,10 @@ func RunPluginCommand(ctx context.Context, cfg *config.Config, args []string) (s
 		if len(args) < 2 {
 			return "", fmt.Errorf("usage: plugin remove <name>")
 		}
-		if err := RemoveRemote(cfg, args[1]); err != nil {
+		if err := DeleteSkill(cfg, cwd, args[1]); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("Removed plugin skill %q.", args[1]), nil
+		return fmt.Sprintf("Removed skill %q.", args[1]), nil
 	case "enable":
 		if len(args) < 2 {
 			return "", fmt.Errorf("usage: plugin enable <name>")
@@ -143,7 +143,7 @@ func RunPluginCommand(ctx context.Context, cfg *config.Config, args []string) (s
 		return fmt.Sprintf("Disabled skill %q.", args[1]), nil
 	case "list":
 		// Convenience: `plugin list` = installed skills with versions.
-		return pluginInstalledList(cfg), nil
+		return pluginInstalledList(cfg, cwd), nil
 	default:
 		return "", fmt.Errorf("unknown plugin subcommand %q (try `plugin help`)", args[0])
 	}
@@ -175,11 +175,19 @@ func runPluginMarketplace(ctx context.Context, cfg *config.Config, args []string
 		}
 		return fmt.Sprintf("Removed marketplace %q. Installed skills remain until removed.", args[1]), nil
 	case "sync", "update":
+		// No address: sync every configured marketplace. With an address: only it.
+		if len(args) >= 2 {
+			res, err := SyncSource(ctx, cfg, args[1])
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("Synced marketplace %q. %s", args[1], formatSyncLine(res)), nil
+		}
 		res, err := Sync(ctx, cfg)
 		if err != nil {
 			return "", err
 		}
-		return "Synced marketplaces. " + formatSyncLine(res), nil
+		return "Synced all marketplaces. " + formatSyncLine(res), nil
 	default:
 		return "", fmt.Errorf("unknown marketplace subcommand %q", args[0])
 	}
@@ -259,9 +267,12 @@ func pluginMarketplaceList(ctx context.Context, cfg *config.Config) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func pluginInstalledList(cfg *config.Config) string {
+func pluginInstalledList(cfg *config.Config, cwd string) string {
+	if strings.TrimSpace(cwd) == "" {
+		cwd = "."
+	}
 	loader := NewLoader(cfg.Skills.Dirs)
-	loaded, err := loader.LoadAll(".", cfg.Paths.Home, cfg.Skills.ManagedDir(cfg.Paths.Home))
+	loaded, err := loader.LoadAll(cwd, cfg.Paths.Home, cfg.Skills.ManagedDir(cfg.Paths.Home))
 	if err != nil {
 		return fmt.Sprintf("failed to load skills: %v", err)
 	}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { SchemaForm, IconTrash, type JsonSchema } from "./SchemaForm";
+import { SchemaForm, IconTrash, type JsonSchema, type FieldOverride } from "./SchemaForm";
 
 type InstalledSkill = {
   name: string;
@@ -8,6 +8,7 @@ type InstalledSkill = {
   enabled: boolean;
   version?: string;
   source?: string;
+  readonly?: boolean;
 };
 
 type SkillUpdate = {
@@ -77,7 +78,8 @@ function IconSync() {
   );
 }
 
-function IconUpdate() {
+// Download-to-tray glyph for the "download update" action.
+function IconDownload() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -89,12 +91,98 @@ function IconUpdate() {
 }
 
 /**
- * SkillsSection is the combined Skills tab: the schema-driven `skills.dirs` /
- * `skills.sources` editor (adding, listing, and removing remote sources is the
- * generic array editor rendered by SchemaForm — no duplicate control here),
- * a Sync action that fetches the configured sources, and the installed-skills
- * list with versions, enable/disable, delete, and a per-skill Update action
- * shown when a newer version is available upstream.
+ * SourcesEditor renders the `skills.sources` array (config-backed via onChange)
+ * with a per-marketplace Sync button and, in the footer, Add (left) plus
+ * Sync all (right). It replaces the generic array control via SchemaForm's
+ * fieldOverride hook.
+ */
+function SourcesEditor(props: {
+  value: string[];
+  onChange: (next: string[]) => void;
+  onSyncOne: (source: string) => void;
+  onSyncAll: () => void;
+  syncing: boolean;
+}) {
+  const { value, onChange, onSyncOne, onSyncAll, syncing } = props;
+  const sources = Array.isArray(value) ? value : [];
+  return (
+    <fieldset className="settings-fieldset">
+      <legend>Remote skill sources</legend>
+      <p className="settings-field-desc">
+        GitHub repos (<code>owner/repo[@ref]</code>), git URLs, or an{" "}
+        <a href="https://agents.md" target="_blank" rel="noreferrer">agents-standard</a>{" "}
+        <code>marketplace.json</code> URL. Saved to <code>skills.sources</code>; fetched only when
+        you sync.
+      </p>
+      <ul className="settings-array">
+        {sources.map((src, i) => (
+          <li key={i} className="settings-array-row">
+            <div className="settings-array-row-field">
+              <input
+                className="settings-input"
+                type="text"
+                value={src}
+                placeholder="owner/repo  ·  https://…/marketplace.json"
+                onChange={(e) => {
+                  const next = [...sources];
+                  next[i] = e.target.value;
+                  onChange(next);
+                }}
+              />
+            </div>
+            <button
+              type="button"
+              className="settings-btn settings-btn-icon"
+              disabled={syncing || !src.trim()}
+              onClick={() => onSyncOne(src)}
+              title={`Sync ${src.trim() || "this marketplace"}`}
+              aria-label="Sync this marketplace"
+              data-testid={`skills-sync-source-${i}`}
+            >
+              <IconSync />
+            </button>
+            <button
+              type="button"
+              className="settings-btn settings-btn-icon settings-btn-danger settings-array-remove"
+              onClick={() => onChange(sources.filter((_, j) => j !== i))}
+              title="Remove"
+              aria-label="Remove marketplace"
+            >
+              <IconTrash />
+            </button>
+          </li>
+        ))}
+      </ul>
+      <div className="skills-sources-footer">
+        <button
+          type="button"
+          className="settings-btn"
+          onClick={() => onChange([...sources, ""])}
+        >
+          Add
+        </button>
+        <button
+          type="button"
+          className="settings-btn skills-sync-all-btn"
+          disabled={syncing || sources.length === 0}
+          onClick={onSyncAll}
+          title="Fetch every configured marketplace"
+          data-testid="skills-sync-all"
+        >
+          <IconSync />
+          <span>Sync all</span>
+        </button>
+      </div>
+    </fieldset>
+  );
+}
+
+/**
+ * SkillsSection is the combined Skills tab: the schema-driven `skills.dirs`
+ * editor, a config-backed remote-sources editor (add/list/remove with a
+ * per-source and a Sync-all button), and the installed-skills list with
+ * versions, an iOS-style enable switch, a Download-update action when a newer
+ * version exists, and a Delete action (disabled for bundled read-only skills).
  */
 export function SkillsSection(props: {
   schema: JsonSchema;
@@ -174,9 +262,7 @@ export function SkillsSection(props: {
     })();
   };
 
-  // One action: fetch every configured source in skills.sources, then refresh
-  // the installed list and re-check versions. (Save the settings first so newly
-  // added sources are persisted before syncing.)
+  // Sync all configured sources, then refresh the list and re-check versions.
   const onSync = () => {
     setSyncing(true);
     setError(null);
@@ -193,23 +279,44 @@ export function SkillsSection(props: {
     })();
   };
 
+  // Sync a single marketplace by its source string (works on the current row
+  // value even before the settings are saved).
+  const onSyncOne = (source: string) => {
+    const src = source.trim();
+    if (!src) return;
+    setSyncing(true);
+    setError(null);
+    setStatus(null);
+    void (async () => {
+      const res = await apiSend(`/coddy/skills/sync?source=${encodeURIComponent(src)}`, "POST");
+      if (!res.ok) setError(res.error || "Sync failed");
+      else {
+        setStatus(`Synced ${src}.`);
+        await loadInstalled();
+        await refreshUpdates();
+      }
+      setSyncing(false);
+    })();
+  };
+
+  const fieldOverride: FieldOverride = ({ path, value: fv, onChange: fc }) => {
+    if (path === "sources") {
+      return (
+        <SourcesEditor
+          value={(fv as string[]) ?? []}
+          onChange={(next) => fc(next)}
+          onSyncOne={onSyncOne}
+          onSyncAll={onSync}
+          syncing={syncing}
+        />
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="settings-skills-section">
-      <SchemaForm schema={schema} value={value} onChange={onChange} />
-
-      <div className="skills-sources-actions">
-        <button
-          type="button"
-          className="settings-btn settings-btn-icon skills-sync-btn"
-          disabled={syncing || loading}
-          onClick={onSync}
-          title="Sync — fetch the remote skill sources and refresh the list"
-          aria-label="Sync remote skill sources"
-          data-testid="skills-sync"
-        >
-          <IconSync />
-        </button>
-      </div>
+      <SchemaForm schema={schema} value={value} onChange={onChange} fieldOverride={fieldOverride} />
 
       <p className="appearance-section-label settings-skills-installed-label">
         Installed skills
@@ -260,11 +367,11 @@ export function SkillsSection(props: {
                     className="settings-btn settings-btn-icon settings-btn-primary skills-update-btn"
                     disabled={!!busy[sk.name]}
                     onClick={() => onUpdateSkill(sk)}
-                    title={`Update ${sk.name} from v${upd?.version || sk.version || "?"} to v${upd?.latest}`}
-                    aria-label={`Update ${sk.name} to version ${upd?.latest}`}
+                    title={`Download update: ${sk.name} v${upd?.version || sk.version || "?"} → v${upd?.latest}`}
+                    aria-label={`Download update for ${sk.name} to version ${upd?.latest}`}
                     data-testid={`skills-update-${sk.name}`}
                   >
-                    <IconUpdate />
+                    <IconDownload />
                   </button>
                 ) : null}
                 <button
@@ -280,19 +387,17 @@ export function SkillsSection(props: {
                 >
                   <span className="skill-switch-thumb" />
                 </button>
-                {sk.source ? (
-                  <button
-                    type="button"
-                    className="settings-btn settings-btn-icon settings-btn-danger"
-                    disabled={!!busy[sk.name]}
-                    onClick={() => onRemove(sk)}
-                    title="Delete"
-                    aria-label={`Delete ${sk.name}`}
-                    data-testid={`skills-delete-${sk.name}`}
-                  >
-                    <IconTrash />
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  className="settings-btn settings-btn-icon settings-btn-danger"
+                  disabled={!!busy[sk.name] || !!sk.readonly}
+                  onClick={() => onRemove(sk)}
+                  title={sk.readonly ? "Bundled skill — cannot be deleted" : "Delete"}
+                  aria-label={`Delete ${sk.name}`}
+                  data-testid={`skills-delete-${sk.name}`}
+                >
+                  <IconTrash />
+                </button>
               </li>
             );
           })}

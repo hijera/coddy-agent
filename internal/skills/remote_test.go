@@ -636,3 +636,65 @@ func TestAddRemoveSourceDoNotClobberConfig(t *testing.T) {
 		t.Errorf("after remove: max_turns=%d sources=%v", reloaded2.Agent.MaxTurns, reloaded2.Skills.Sources)
 	}
 }
+
+func TestSkillReadonly(t *testing.T) {
+	if !SkillReadonly(&Skill{FilePath: filepath.Join("bundled", "x", "SKILL.md")}) {
+		t.Error("bundled (relative path) skill should be read-only")
+	}
+	if SkillReadonly(&Skill{FilePath: string(filepath.Separator) + filepath.Join("abs", "x", "SKILL.md")}) {
+		t.Error("absolute-path skill should be deletable")
+	}
+	if !SkillReadonly(nil) {
+		t.Error("nil skill should be read-only")
+	}
+}
+
+func TestDeleteSkillOnDiskAndReadonly(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, "skills")
+	writeSkill(t, filepath.Join(dir, "foo"), "foo")
+	cfg := &config.Config{
+		Paths:  config.Paths{Home: home},
+		Skills: config.Skills{Dirs: []string{dir}},
+	}
+	// An on-disk skill is deleted (its directory removed).
+	if err := DeleteSkill(cfg, ".", "foo"); err != nil {
+		t.Fatalf("DeleteSkill foo: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "foo")); !os.IsNotExist(err) {
+		t.Errorf("foo dir should be gone: %v", err)
+	}
+	// The bundled skill is read-only and cannot be deleted.
+	if err := DeleteSkill(cfg, ".", "generate-rules"); err == nil {
+		t.Error("expected bundled skill to be read-only")
+	}
+	// Unknown skill errors.
+	if err := DeleteSkill(cfg, ".", "nope"); err == nil {
+		t.Error("expected error for unknown skill")
+	}
+}
+
+func TestSyncSourceSingle(t *testing.T) {
+	if !gitws.GitAvailable() {
+		t.Skip("git binary not available")
+	}
+	repo := t.TempDir()
+	writeMarketplaceManifest(t, repo, "demo", "1.0.0")
+	gitCommitAllRepo(t, repo, true, "v1")
+
+	home := t.TempDir()
+	cfg := &config.Config{
+		Paths:  config.Paths{Home: home},
+		Skills: config.Skills{Dirs: []string{filepath.Join(home, "skills")}},
+	}
+	res, err := SyncSource(context.Background(), cfg, "file://"+filepath.ToSlash(repo))
+	if err != nil {
+		t.Fatalf("SyncSource: %v", err)
+	}
+	if len(res.Failed) != 0 {
+		t.Fatalf("unexpected failures: %+v", res.Failed)
+	}
+	if _, err := os.Stat(filepath.Join(home, "skills", "demo", "SKILL.md")); err != nil {
+		t.Errorf("demo not installed by SyncSource: %v", err)
+	}
+}

@@ -376,7 +376,8 @@ func runPlugin(args []string) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
-	out, err := skills.RunPluginCommand(context.Background(), cfg, args)
+	cwd, _ := os.Getwd()
+	out, err := skills.RunPluginCommand(context.Background(), cfg, cwd, args)
 	if err != nil {
 		return err
 	}

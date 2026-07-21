@@ -15,11 +15,11 @@ func TestRunPluginCommandUsageAndErrors(t *testing.T) {
 	cfg := &config.Config{Paths: config.Paths{Home: t.TempDir()}}
 	ctx := context.Background()
 
-	out, err := RunPluginCommand(ctx, cfg, nil)
+	out, err := RunPluginCommand(ctx, cfg, ".", nil)
 	if err != nil || !strings.Contains(out, "plugin commands:") {
 		t.Fatalf("help: out=%q err=%v", out, err)
 	}
-	out, err = RunPluginCommand(ctx, cfg, []string{"help"})
+	out, err = RunPluginCommand(ctx, cfg, ".", []string{"help"})
 	if err != nil || !strings.Contains(out, "marketplace") {
 		t.Fatalf("help word: out=%q err=%v", out, err)
 	}
@@ -36,7 +36,7 @@ func TestRunPluginCommandUsageAndErrors(t *testing.T) {
 		{"disable"},
 	}
 	for _, args := range cases {
-		if _, err := RunPluginCommand(ctx, cfg, args); err == nil {
+		if _, err := RunPluginCommand(ctx, cfg, ".", args); err == nil {
 			t.Errorf("expected error for args %v", args)
 		}
 	}
@@ -77,7 +77,7 @@ func TestPluginMarketplaceLifecycleFromLocalGit(t *testing.T) {
 	fileURL := "file://" + filepath.ToSlash(repo)
 
 	// install adds the source and materializes the skill.
-	out, err := RunPluginCommand(ctx, cfg, []string{"install", fileURL})
+	out, err := RunPluginCommand(ctx, cfg, ".", []string{"install", fileURL})
 	if err != nil {
 		t.Fatalf("install: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestPluginMarketplaceLifecycleFromLocalGit(t *testing.T) {
 	}
 
 	// marketplace list reports a valid agents-standard marketplace.
-	out, err = RunPluginCommand(ctx, cfg, []string{"marketplace", "list"})
+	out, err = RunPluginCommand(ctx, cfg, ".", []string{"marketplace", "list"})
 	if err != nil {
 		t.Fatalf("marketplace list: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestPluginMarketplaceLifecycleFromLocalGit(t *testing.T) {
 	}
 
 	// plugin list shows the installed skill with its version.
-	out, err = RunPluginCommand(ctx, cfg, []string{"list"})
+	out, err = RunPluginCommand(ctx, cfg, ".", []string{"list"})
 	if err != nil {
 		t.Fatalf("plugin list: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestPluginMarketplaceLifecycleFromLocalGit(t *testing.T) {
 	}
 
 	// marketplace remove drops the source.
-	out, err = RunPluginCommand(ctx, cfg, []string{"marketplace", "remove", fileURL})
+	out, err = RunPluginCommand(ctx, cfg, ".", []string{"marketplace", "remove", fileURL})
 	if err != nil {
 		t.Fatalf("marketplace remove: %v", err)
 	}

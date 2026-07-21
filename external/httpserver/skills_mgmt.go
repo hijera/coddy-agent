@@ -32,6 +32,7 @@ type skillRowResponse struct {
 	Enabled     bool   `json:"enabled"`
 	Version     string `json:"version,omitempty"` // installed version, when known
 	Source      string `json:"source,omitempty"`  // configured source string when remote-synced
+	Readonly    bool   `json:"readonly"`          // bundled skills cannot be deleted
 }
 
 // coddySkillsGet lists all skills with their enabled/disabled state.
@@ -72,6 +73,7 @@ func (s *Server) coddySkillsGet(w http.ResponseWriter, r *http.Request) {
 		}
 		if sk != nil {
 			row.FilePath = sk.FilePath
+			row.Readonly = skills.SkillReadonly(sk)
 		}
 		if ent, ok := remote[sum.Name]; ok {
 			row.Source = ent.Source
@@ -132,7 +134,14 @@ func (s *Server) coddySkillsSyncPost(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	res, err := skills.Sync(r.Context(), s.activeCfg())
+	// Optional ?source=<src>: sync only that marketplace; otherwise sync all.
+	var res *skills.SyncResult
+	var err error
+	if src := strings.TrimSpace(r.URL.Query().Get("source")); src != "" {
+		res, err = skills.SyncSource(r.Context(), s.activeCfg(), src)
+	} else {
+		res, err = skills.Sync(r.Context(), s.activeCfg())
+	}
 	if err != nil {
 		body, _ := json.Marshal(map[string]interface{}{"error": map[string]string{"message": err.Error()}})
 		http.Error(w, string(body), http.StatusInternalServerError)
@@ -198,13 +207,13 @@ func (s *Server) coddySkillsDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := r.PathValue("name")
-	if err := skills.RemoveRemote(s.activeCfg(), name); err != nil {
+	if err := skills.DeleteSkill(s.activeCfg(), s.defaultCWD, name); err != nil {
 		body, _ := json.Marshal(map[string]interface{}{"error": map[string]string{"message": err.Error()}})
 		http.Error(w, string(body), http.StatusBadRequest)
 		return
 	}
 	s.invalidateSlashCache()
-	slog.Info("remote skill removed", "name", name)
+	slog.Info("skill deleted", "name", name)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
 }

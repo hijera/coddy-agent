@@ -81,9 +81,9 @@ runs without an LLM turn, like `/compact`):
 coddy plugin marketplace list                         # configured marketplaces + validity status
 coddy plugin marketplace add <owner/repo | url>       # register a marketplace and fetch its skills
 coddy plugin marketplace remove <owner/repo | url>    # drop a marketplace from config.yaml
-coddy plugin marketplace sync                          # refresh all marketplaces
+coddy plugin marketplace sync [owner/repo | url]      # refresh all marketplaces, or just one
 coddy plugin install <owner/repo | url>               # install (and update) a marketplace's skills
-coddy plugin remove <name>                             # remove an installed skill
+coddy plugin remove <name>                             # delete an installed skill (bundled = read-only)
 coddy plugin enable <name>   |   plugin disable <name> # toggle a skill
 coddy plugin list                                      # installed skills with versions
 ```

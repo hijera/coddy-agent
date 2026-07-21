@@ -829,6 +829,13 @@ func openAPISpec() map[string]interface{} {
 					"summary":     "Sync remote skill sources",
 					"description": "Fetches every source in **`skills.sources`** (GitHub repos, git URLs, or an http(s) URL to an agents-standard **`marketplace.json`**) and materializes their skills into the managed skills directory. Manual only — never runs automatically. Returns lists of added/updated skill names and per-source failures.",
 					"operationId": "syncSkills",
+					"parameters": []interface{}{
+						map[string]interface{}{
+							"name": "source", "in": "query", "required": false,
+							"schema":      map[string]string{"type": "string"},
+							"description": "Sync only this marketplace source; omit to sync all configured sources.",
+						},
+					},
 					"responses": map[string]interface{}{
 						"200": map[string]interface{}{
 							"description": "Sync result.",
@@ -952,7 +959,7 @@ func openAPISpec() map[string]interface{} {
 			"/coddy/skills/{name}": map[string]interface{}{
 				"delete": map[string]interface{}{
 					"summary":     "Remove a remote skill",
-					"description": "Deletes a remote (synced) skill's directory and its provenance entry. Fails with 400 for skills that were not installed from a remote source (e.g. local or bundled skills).",
+					"description": "Deletes any on-disk skill by name (its directory, and its remote provenance entry when synced). Bundled (read-only) skills cannot be deleted and return 400; so do skills outside the configured skill directories.",
 					"operationId": "removeRemoteSkill",
 					"parameters": []interface{}{
 						map[string]interface{}{
@@ -1076,6 +1083,7 @@ func openAPISpec() map[string]interface{} {
 						"enabled":     map[string]interface{}{"type": "boolean", "description": "False when the skill is in the disabled list."},
 						"version":     map[string]string{"type": "string", "description": "Installed version: the marketplace-declared version for synced skills, else the SKILL.md frontmatter version. Absent when unknown."},
 						"source":      map[string]string{"type": "string", "description": "Configured source string when the skill was installed via `skills.sources`; absent for local/bundled skills."},
+						"readonly":    map[string]interface{}{"type": "boolean", "description": "True for bundled skills, which cannot be deleted."},
 					},
 				},
 				"SkillSyncResult": map[string]interface{}{

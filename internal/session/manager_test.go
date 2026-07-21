@@ -126,6 +126,7 @@ func TestManagerSessionNewIncludesConfigOptions(t *testing.T) {
 	}
 	if res == nil {
 		t.Fatal("nil result")
+		return
 	}
 	if len(res.ConfigOptions) < 2 {
 		t.Fatalf("expected at least mode + model config options, got %d", len(res.ConfigOptions))
@@ -141,6 +142,7 @@ func TestManagerSessionNewIncludesConfigOptions(t *testing.T) {
 	}
 	if modeOpt == nil {
 		t.Fatal("expected config option id mode")
+		return
 	}
 	if modeOpt.Category != "mode" || modeOpt.Type != "select" {
 		t.Fatalf("mode option: %+v", modeOpt)
@@ -150,6 +152,7 @@ func TestManagerSessionNewIncludesConfigOptions(t *testing.T) {
 	}
 	if modelOpt == nil {
 		t.Fatal("expected config option id model")
+		return
 	}
 	if modelOpt.Category != "model" || modelOpt.Type != "select" {
 		t.Fatalf("model option: %+v", modelOpt)
@@ -492,6 +495,7 @@ func TestSessionNewSendsAvailableSlashCommandsUpdate(t *testing.T) {
 	}
 	if slash == nil {
 		t.Fatalf("expected AvailableCommandsUpdate in %#v", snd.ups)
+		return
 	}
 	// Skills plus the built-in compact command (advertised while compaction is enabled).
 	if len(slash.AvailableCommands) != 3 {

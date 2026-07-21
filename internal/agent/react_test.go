@@ -230,6 +230,7 @@ func TestResumeAfterPermissionRejectContinuesWithoutExecutingTool(t *testing.T) 
 	}
 	if toolMsg == nil {
 		t.Fatal("missing resumed tool result message")
+		return
 	}
 	if strings.Contains(toolMsg.Content, "SHOULD_NOT_RUN") {
 		t.Fatalf("rejected permission executed the tool: %q", toolMsg.Content)
@@ -263,6 +264,7 @@ func TestComputeContextBreakdownSystemPromptNonZero(t *testing.T) {
 	b := st.GetLastContextBreakdown()
 	if b == nil {
 		t.Fatal("expected breakdown")
+		return
 	}
 	if b.SystemPrompt <= 0 {
 		t.Fatalf("expected system prompt tokens > 0, got %+v", b)

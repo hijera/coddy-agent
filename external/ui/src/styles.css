@@ -6025,6 +6025,23 @@ textarea#composer {
   flex: 0 0 auto;
 }
 
+/* Briefly flash a just-installed skill so it's easy to spot after the list
+   re-sorts alphabetically (it may otherwise land far below the fold). */
+.skills-list-item.is-just-installed {
+  border-radius: 8px;
+  animation: skills-just-installed 2.4s ease-out;
+}
+
+@keyframes skills-just-installed {
+  0%,
+  35% {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
 /* Transient success state on a Sync button (checkmark flash after a sync). */
 .settings-btn.is-synced {
   color: var(--accent);

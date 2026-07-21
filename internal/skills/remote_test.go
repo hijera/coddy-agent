@@ -736,6 +736,23 @@ func TestAvailablePluginsAndInstallPlugin(t *testing.T) {
 		t.Fatalf("demo not installed: %v", err)
 	}
 
+	// The installed plugin must be listed by the loader (the contract the
+	// GET /coddy/skills list and the Settings UI rely on to show it).
+	loaded, err := NewLoader(cfg.Skills.Dirs).LoadAll(".", home, cfg.Skills.ManagedDir(home))
+	if err != nil {
+		t.Fatalf("LoadAll: %v", err)
+	}
+	listed := false
+	for _, sk := range loaded {
+		if CanonicalCommandName(sk) == "demo" {
+			listed = true
+			break
+		}
+	}
+	if !listed {
+		t.Error("installed plugin is not listed by the loader")
+	}
+
 	// After install: demo is marked installed.
 	avail2, err := AvailablePlugins(ctx, cfg, ".")
 	if err != nil {

@@ -3,6 +3,7 @@ package skills
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -304,10 +305,14 @@ func installFromDir(root string, entry RemoteEntry, managedDir string, lock map[
 			movedAside = true
 		}
 		if err := os.Rename(tmpDst, dst); err != nil {
-			if movedAside {
-				_ = os.Rename(bakDst, dst) // roll back to the previous install
-			}
 			_ = os.RemoveAll(tmpDst)
+			if movedAside {
+				if rbErr := os.Rename(bakDst, dst); rbErr != nil {
+					// Both the swap and the rollback failed: keep the backup and
+					// surface where the previous copy is so it can be recovered.
+					err = fmt.Errorf("install %q failed (%w) and rollback failed (%v); previous copy left at %s", name, err, rbErr, bakDst)
+				}
+			}
 			if firstErr == nil {
 				firstErr = err
 			}
@@ -563,8 +568,16 @@ func AddSource(cfg *config.Config, source string) (bool, error) {
 func applySourceChange(cfg *config.Config, mutate func(current []string) (next []string, changed bool, err error)) (bool, error) {
 	fresh := cfg
 	if strings.TrimSpace(cfg.Paths.ConfigPath) != "" {
-		if reloaded, err := config.LoadWithPaths(cfg.Paths); err == nil && reloaded != nil {
+		reloaded, err := config.LoadWithPaths(cfg.Paths)
+		switch {
+		case err == nil && reloaded != nil:
 			fresh = reloaded
+		case errors.Is(err, os.ErrNotExist):
+			// No config file on disk yet — it will be created from cfg below.
+		default:
+			// A real read/parse error: fail loudly rather than persist the
+			// (possibly stale) caller config over whatever is on disk.
+			return false, fmt.Errorf("reload config before source change: %w", err)
 		}
 	}
 	next, changed, err := mutate(fresh.Skills.Sources)
@@ -589,6 +602,10 @@ func RemoveRemote(cfg *config.Config, skillName string) error {
 	if err != nil {
 		return err
 	}
+	// Serialize with Sync/UpdateSkill so removal cannot race a materialization
+	// (deleting a dir mid-swap) or lose a concurrent .remote.json update.
+	syncMu.Lock()
+	defer syncMu.Unlock()
 	managedDir := cfg.Skills.ManagedDir(cfg.Paths.Home)
 	lock := readRemoteLock(managedDir)
 	if _, ok := lock[name]; !ok {

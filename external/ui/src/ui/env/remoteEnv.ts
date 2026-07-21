@@ -86,6 +86,68 @@ export function snapshotEnv(): CoddyEnv {
   return getEnv();
 }
 
+// Per-remote bearer tokens, kept in this browser only, so re-selecting a known remote from the
+// composer menu is one click instead of re-typing the token every time.
+const TOKENS_KEY = "coddy_env_tokens";
+
+export function getRemoteToken(url: string): string {
+  try {
+    const m = JSON.parse(localStorage.getItem(TOKENS_KEY) || "{}") as Record<
+      string,
+      unknown
+    >;
+    const t = m[normalizeBase(url)];
+    return typeof t === "string" ? t : "";
+  } catch {
+    return "";
+  }
+}
+
+export function setRemoteToken(url: string, token: string): void {
+  try {
+    const m = JSON.parse(localStorage.getItem(TOKENS_KEY) || "{}") as Record<
+      string,
+      string
+    >;
+    m[normalizeBase(url)] = token;
+    localStorage.setItem(TOKENS_KEY, JSON.stringify(m));
+  } catch {
+    /* ignore persistence errors */
+  }
+}
+
+/** hasRemoteToken reports whether a token was ever saved for this remote (even an empty one). */
+export function hasRemoteToken(url: string): boolean {
+  try {
+    const m = JSON.parse(localStorage.getItem(TOKENS_KEY) || "{}") as Record<
+      string,
+      unknown
+    >;
+    return Object.prototype.hasOwnProperty.call(m, normalizeBase(url));
+  } catch {
+    return false;
+  }
+}
+
+/** connectLocal switches to the local origin and reloads so all state re-fetches locally. */
+export function connectLocal(): void {
+  setEnv({ mode: "local" });
+  window.location.reload();
+}
+
+/** connectRemote points the UI at a remote coddy http (persisting its token) and reloads. */
+export function connectRemote(url: string, token: string, name?: string): void {
+  const base = normalizeBase(url);
+  if (!base) return;
+  setRemoteToken(base, token);
+  setEnv(
+    name
+      ? { mode: "remote", baseUrl: base, token, name }
+      : { mode: "remote", baseUrl: base, token },
+  );
+  window.location.reload();
+}
+
 export function isApiPath(path: string): boolean {
   return (
     path.startsWith("/v1/") ||

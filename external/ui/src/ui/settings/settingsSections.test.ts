@@ -54,7 +54,6 @@ test("derives tabs in schema order with Appearance first and System group", () =
   const ids = sections.map((s) => s.id);
   expect(ids).toEqual([
     "appearance",
-    "environment",
     "providers",
     "models",
     "agent",
@@ -101,7 +100,8 @@ test("skills is its own combined tab; labels come from schema titles", () => {
   expect(byId.agent.label).toBe("ReAct agent");
 });
 
-test("Appearance and Environment tabs are present even without a schema", () => {
+test("Appearance tab is present even without a schema", () => {
   const sections = deriveSettingsSections(null);
-  expect(sections.map((s) => s.id)).toEqual(["appearance", "environment"]);
+  expect(sections).toHaveLength(1);
+  expect(sections[0].id).toBe("appearance");
 });

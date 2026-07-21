@@ -3364,6 +3364,64 @@ textarea#composer {
   margin-top: 2px;
 }
 
+/* Environment chip (composer bar): local / remote coddy http selector. */
+.composer-tab.mode-btn.mode-env {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mode-env-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.4;
+}
+
+.mode-env-dot[data-remote="1"] {
+  background: #f59e0b; /* amber when driving a remote server */
+  opacity: 1;
+}
+
+.mode-menu--env {
+  min-width: 240px;
+  max-width: min(340px, calc(100vw - 24px));
+}
+
+.mode-menu--portal.mode-menu--env {
+  width: min(300px, calc(100vw - 24px));
+}
+
+.mode-env-sub {
+  margin-left: 6px;
+  font-size: 0.85em;
+  opacity: 0.55;
+}
+
+.mode-menu-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px 8px;
+}
+
+.mode-menu-form-title {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.mode-menu-form-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.mode-menu-form-actions .mode-item {
+  flex: 1;
+  justify-content: center;
+  text-align: center;
+}
+
 .mode-menu-empty {
   padding: 12px 10px;
   font-size: 13px;

@@ -1,5 +1,4 @@
 import { AppearanceThemePicker } from "../theme/AppearanceModal";
-import { EnvironmentSection } from "./EnvironmentSection";
 import { applyModelsChange } from "./applyModelsChange";
 import { ModelField } from "./ModelField";
 import { ModelPicker } from "./ModelPicker";
@@ -98,10 +97,6 @@ export function SettingsSection(props: {
 
   if (section.kind === "appearance") {
     return <AppearanceThemePicker />;
-  }
-
-  if (section.kind === "environment") {
-    return <EnvironmentSection />;
   }
 
   if (section.kind === "skills") {

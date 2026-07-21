@@ -5,8 +5,7 @@ export type SectionKind =
   | "object"
   | "group"
   | "skills"
-  | "appearance"
-  | "environment";
+  | "appearance";
 
 export type SectionDescriptor = {
   /** Unique id: a config key, or a synthetic id ("system", "appearance"). */
@@ -32,7 +31,6 @@ export type SectionDescriptor = {
  */
 export const SECTION_DESCRIPTIONS: Record<string, string> = {
   appearance: "Theme & color mode",
-  environment: "Local or remote server",
   providers: "LLM API connections",
   models: "Named model configs",
   agent: "ReAct agent defaults",
@@ -77,16 +75,9 @@ export function deriveSettingsSections(
     description: SECTION_DESCRIPTIONS.appearance,
     kind: "appearance",
   };
-  // Synthetic client-side tab: choose the local server or a remote coddy http (localStorage).
-  const environment: SectionDescriptor = {
-    id: "environment",
-    label: "Environment",
-    description: SECTION_DESCRIPTIONS.environment,
-    kind: "environment",
-  };
 
   if (!schema || schema.type !== "object" || !schema.properties) {
-    return [appearance, environment];
+    return [appearance];
   }
 
   const props = schema.properties;
@@ -159,5 +150,5 @@ export function deriveSettingsSections(
     emit(key);
   }
 
-  return [appearance, environment, ...out];
+  return [appearance, ...out];
 }

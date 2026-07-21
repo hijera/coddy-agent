@@ -264,7 +264,7 @@ func ConfigToJSONDTO(c *Config) *ConfigJSON {
 		},
 	}
 	for _, rm := range c.HTTPServer.Remotes {
-		out.HTTPServer.Remotes = append(out.HTTPServer.Remotes, HTTPRemoteJSON{Name: rm.Name, URL: rm.URL})
+		out.HTTPServer.Remotes = append(out.HTTPServer.Remotes, HTTPRemoteJSON(rm))
 	}
 	out.Scheduler = SchedulerJSON{
 		Enabled: c.Scheduler.Enabled, Dir: c.Scheduler.Dir, MaxQueue: c.Scheduler.MaxQueue,
@@ -357,7 +357,7 @@ func JSONDTOToConfig(j *ConfigJSON, paths Paths) *Config {
 		},
 	}
 	for _, rm := range j.HTTPServer.Remotes {
-		cfg.HTTPServer.Remotes = append(cfg.HTTPServer.Remotes, HTTPRemote{Name: rm.Name, URL: rm.URL})
+		cfg.HTTPServer.Remotes = append(cfg.HTTPServer.Remotes, HTTPRemote(rm))
 	}
 	cfg.Scheduler = SchedulerConfig{
 		Enabled: j.Scheduler.Enabled, Dir: j.Scheduler.Dir, MaxQueue: j.Scheduler.MaxQueue,

@@ -48,11 +48,18 @@ func (s *Server) authPolicyNow() authPolicy {
 func (s *Server) authGate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pol := s.authPolicyNow()
-		if !pol.enabled || !s.requestNeedsAuth(r, pol.publicDocs) {
+		_, pattern := s.mux.Handler(r)
+		if !pol.enabled || !isProtectedPattern(pattern, pol.publicDocs) {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if !acceptBearer(pol.tokens, bearerToken(r)) {
+		got := bearerToken(r)
+		if got == "" && isSSETokenPattern(pattern) {
+			// EventSource cannot set an Authorization header cross-origin, so the composer-stream
+			// re-attach GET also accepts a ?access_token= query parameter (this route only).
+			got = strings.TrimSpace(r.URL.Query().Get("access_token"))
+		}
+		if !acceptBearer(pol.tokens, got) {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="coddy"`)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -61,12 +68,11 @@ func (s *Server) authGate(next http.Handler) http.Handler {
 	})
 }
 
-// requestNeedsAuth classifies a request as protected using the matched route pattern rather than
-// a fragile string prefix: the SPA shell and static assets fall through to the "/" catch-all and
-// stay public; every registered API route (/v1/*, /coddy/*) is protected; /docs and /openapi.*
-// are protected unless publicDocs is set.
-func (s *Server) requestNeedsAuth(r *http.Request, publicDocs bool) bool {
-	_, pattern := s.mux.Handler(r)
+// isProtectedPattern classifies a matched route pattern rather than using a fragile string prefix:
+// the SPA shell and static assets fall through to the "/" catch-all and stay public; every
+// registered API route (/v1/*, /coddy/*) is protected; /docs and /openapi.* are protected unless
+// publicDocs is set.
+func isProtectedPattern(pattern string, publicDocs bool) bool {
 	if pattern == "" || pattern == "/" {
 		return false
 	}
@@ -83,6 +89,11 @@ func isDocsPattern(pattern string) bool {
 	default:
 		return false
 	}
+}
+
+// isSSETokenPattern reports whether a route may authenticate via ?access_token= (EventSource).
+func isSSETokenPattern(pattern string) bool {
+	return pattern == "GET /coddy/sessions/{id}/composer-stream"
 }
 
 // bearerToken extracts the token from an "Authorization: Bearer <token>" header.

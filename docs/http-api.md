@@ -32,6 +32,33 @@ network. Binding a non-loopback address without a token logs a startup warning u
 
 Without a token the surface is unauthenticated; run behind appropriate network controls.
 
+### Cross-origin access and the remote UI
+
+The bundled UI can point at a **remote** `coddy http` server (an environment selector switches
+the API base URL and sends the remote's bearer token). Because that is a cross-origin call, the
+remote server must opt into CORS:
+
+```yaml
+httpserver:
+  auth_token: "${CODDY_HTTP_TOKEN}"
+  cors:
+    enabled: true
+    allowed_origins: ["http://localhost:12345", "https://my-ui.example"]   # or ["*"]
+  remotes:                       # optional: offered in the UI environment selector
+    - name: "prod box"
+      url: "https://box.example:12345"
+```
+
+When `cors.enabled` is true, preflight `OPTIONS` requests for an allowed origin return `204` with
+`Access-Control-Allow-Origin` (echoed origin, or `*` when configured) and
+`Access-Control-Allow-Headers: Authorization, Content-Type, X-Coddy-Session-ID`; disallowed origins
+receive no CORS headers. Bearer auth still applies to the actual request. Tokens for remotes are
+**not** stored in `httpserver.remotes`; the UI keeps them client-side per remote.
+
+Because `EventSource` cannot send an `Authorization` header cross-origin, the composer-stream
+re-attach route **`GET /coddy/sessions/{id}/composer-stream`** (and only that route) also accepts
+the token as a `?access_token=` query parameter.
+
 ## Embedded web UI (**`-tags=http,ui`**)
 
 - **`GET /`** serves **`index.html`**, **`styles.css`**, and **`app.js`** from **`external/ui/`** (`go:embed`) when **`ui`** is set at link time with **`http`**. Responses for **`/`**, **`/index.html`**, **`/app.js`**, and **`/styles.css`** include **`Cache-Control: no-cache`** so a normal reload picks up assets after you rebuild the binary (fixed URLs, no fingerprint).

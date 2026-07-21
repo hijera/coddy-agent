@@ -170,12 +170,26 @@ type MemoryJSON struct {
 // HTTPServerJSON mirrors HTTPServerConfig. AuthToken is write-only: ConfigToJSONDTO never
 // populates it (redacted), reporting only whether one is set via AuthConfigured.
 type HTTPServerJSON struct {
-	Host           string `json:"host,omitempty"`
-	Port           int    `json:"port,omitempty"`
-	AuthToken      string `json:"auth_token,omitempty"`
-	AuthConfigured bool   `json:"auth_configured,omitempty"`
-	PublicDocs     bool   `json:"public_docs,omitempty"`
-	AllowInsecure  bool   `json:"allow_insecure,omitempty"`
+	Host           string           `json:"host,omitempty"`
+	Port           int              `json:"port,omitempty"`
+	AuthToken      string           `json:"auth_token,omitempty"`
+	AuthConfigured bool             `json:"auth_configured,omitempty"`
+	PublicDocs     bool             `json:"public_docs,omitempty"`
+	AllowInsecure  bool             `json:"allow_insecure,omitempty"`
+	CORS           HTTPCORSJSON     `json:"cors,omitempty"`
+	Remotes        []HTTPRemoteJSON `json:"remotes,omitempty"`
+}
+
+// HTTPCORSJSON mirrors HTTPCORSConfig.
+type HTTPCORSJSON struct {
+	Enabled        bool     `json:"enabled,omitempty"`
+	AllowedOrigins []string `json:"allowed_origins,omitempty"`
+}
+
+// HTTPRemoteJSON mirrors HTTPRemote.
+type HTTPRemoteJSON struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
 }
 
 // SchedulerJSON mirrors SchedulerConfig.
@@ -244,6 +258,13 @@ func ConfigToJSONDTO(c *Config) *ConfigJSON {
 		AllowInsecure: c.HTTPServer.AllowInsecure,
 		// AuthToken is intentionally redacted; report only whether one is configured.
 		AuthConfigured: strings.TrimSpace(c.HTTPServer.AuthToken) != "",
+		CORS: HTTPCORSJSON{
+			Enabled:        c.HTTPServer.CORS.Enabled,
+			AllowedOrigins: append([]string(nil), c.HTTPServer.CORS.AllowedOrigins...),
+		},
+	}
+	for _, rm := range c.HTTPServer.Remotes {
+		out.HTTPServer.Remotes = append(out.HTTPServer.Remotes, HTTPRemoteJSON{Name: rm.Name, URL: rm.URL})
 	}
 	out.Scheduler = SchedulerJSON{
 		Enabled: c.Scheduler.Enabled, Dir: c.Scheduler.Dir, MaxQueue: c.Scheduler.MaxQueue,
@@ -330,6 +351,13 @@ func JSONDTOToConfig(j *ConfigJSON, paths Paths) *Config {
 		AuthToken:     j.HTTPServer.AuthToken,
 		PublicDocs:    j.HTTPServer.PublicDocs,
 		AllowInsecure: j.HTTPServer.AllowInsecure,
+		CORS: HTTPCORSConfig{
+			Enabled:        j.HTTPServer.CORS.Enabled,
+			AllowedOrigins: append([]string(nil), j.HTTPServer.CORS.AllowedOrigins...),
+		},
+	}
+	for _, rm := range j.HTTPServer.Remotes {
+		cfg.HTTPServer.Remotes = append(cfg.HTTPServer.Remotes, HTTPRemote{Name: rm.Name, URL: rm.URL})
 	}
 	cfg.Scheduler = SchedulerConfig{
 		Enabled: j.Scheduler.Enabled, Dir: j.Scheduler.Dir, MaxQueue: j.Scheduler.MaxQueue,

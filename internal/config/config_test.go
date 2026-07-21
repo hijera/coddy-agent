@@ -707,3 +707,52 @@ func TestHTTPServerAuthTokenPreservedOnRedactedEdit(t *testing.T) {
 		t.Fatalf("unrelated edit lost: max_turns=%d", next.Agent.MaxTurns)
 	}
 }
+
+func TestHTTPServerCORSAndRemotesRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "config.yaml")
+	yaml := httpAuthBaseYAML +
+		"httpserver:\n" +
+		"  cors:\n" +
+		"    enabled: true\n" +
+		"    allowed_origins: [\"http://localhost:5173\", \"*\"]\n" +
+		"  remotes:\n" +
+		"    - name: prod\n" +
+		"      url: https://box.example:12345\n"
+	if err := os.WriteFile(f, []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.HTTPServer.CORS.Enabled || len(cfg.HTTPServer.CORS.AllowedOrigins) != 2 {
+		t.Fatalf("cors not parsed: %+v", cfg.HTTPServer.CORS)
+	}
+	// An exact match echoes the origin; any other origin falls back to the "*" entry.
+	if allow, ok := cfg.HTTPServer.CORSAllowOrigin("http://localhost:5173"); !ok || allow != "http://localhost:5173" {
+		t.Fatalf("exact-match CORSAllowOrigin = %q,%v", allow, ok)
+	}
+	if allow, ok := cfg.HTTPServer.CORSAllowOrigin("http://other.example"); !ok || allow != "*" {
+		t.Fatalf("wildcard CORSAllowOrigin = %q,%v", allow, ok)
+	}
+	if len(cfg.HTTPServer.Remotes) != 1 || cfg.HTTPServer.Remotes[0].Name != "prod" {
+		t.Fatalf("remotes not parsed: %+v", cfg.HTTPServer.Remotes)
+	}
+
+	// Round-trip through the config DTO (GET -> edit -> PUT): CORS + remotes survive.
+	raw, err := json.Marshal(config.ConfigToJSONDTO(cfg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := config.ParseConfigJSONPreservingSecrets(raw, cfg.Paths, cfg)
+	if err != nil {
+		t.Fatalf("round-trip parse: %v", err)
+	}
+	if !back.HTTPServer.CORS.Enabled || len(back.HTTPServer.CORS.AllowedOrigins) != 2 {
+		t.Fatalf("cors lost in round-trip: %+v", back.HTTPServer.CORS)
+	}
+	if len(back.HTTPServer.Remotes) != 1 || back.HTTPServer.Remotes[0].URL != "https://box.example:12345" {
+		t.Fatalf("remotes lost in round-trip: %+v", back.HTTPServer.Remotes)
+	}
+}

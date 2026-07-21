@@ -2114,3 +2114,96 @@ func TestHTTPAuthConfigPutPreservesToken(t *testing.T) {
 		t.Fatalf("token lost after redacted save: %d", got)
 	}
 }
+
+// ---- CORS + cross-origin remote UI enablers ----
+
+func cfgWithCORS(origins ...string) *config.Config {
+	c := cfgWithAuth("")
+	c.HTTPServer.CORS = config.HTTPCORSConfig{Enabled: true, AllowedOrigins: origins}
+	return c
+}
+
+func TestHTTPCORSPreflightAllowedOrigin(t *testing.T) {
+	_, ts := authTestServer(t, cfgWithCORS("http://ui.local"))
+	req, _ := http.NewRequest(http.MethodOptions, ts.URL+"/v1/models", nil)
+	req.Header.Set("Origin", "http://ui.local")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatalf("preflight status %d want 204", res.StatusCode)
+	}
+	if got := res.Header.Get("Access-Control-Allow-Origin"); got != "http://ui.local" {
+		t.Fatalf("ACAO = %q want http://ui.local", got)
+	}
+	if !strings.Contains(res.Header.Get("Access-Control-Allow-Headers"), "Authorization") {
+		t.Fatalf("ACA-Headers missing Authorization: %q", res.Header.Get("Access-Control-Allow-Headers"))
+	}
+}
+
+func TestHTTPCORSDisallowedOrigin(t *testing.T) {
+	_, ts := authTestServer(t, cfgWithCORS("http://ui.local"))
+	req, _ := http.NewRequest(http.MethodOptions, ts.URL+"/v1/models", nil)
+	req.Header.Set("Origin", "http://evil.example")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if got := res.Header.Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("disallowed origin got ACAO %q, want none", got)
+	}
+}
+
+func TestHTTPCORSWildcardActualRequest(t *testing.T) {
+	_, ts := authTestServer(t, cfgWithCORS("*"))
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/v1/models", nil)
+	req.Header.Set("Origin", "http://anything.example")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status %d want 200", res.StatusCode)
+	}
+	if got := res.Header.Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Fatalf("wildcard ACAO = %q want *", got)
+	}
+}
+
+func TestHTTPCORSDisabledNoHeaders(t *testing.T) {
+	_, ts := authTestServer(t, cfgWithAuth("")) // CORS disabled by default
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/v1/models", nil)
+	req.Header.Set("Origin", "http://ui.local")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if got := res.Header.Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("CORS disabled but ACAO set: %q", got)
+	}
+}
+
+func TestHTTPAuthComposerStreamQueryToken(t *testing.T) {
+	_, ts := authTestServer(t, cfgWithAuth("stream-secret"))
+	sid := "sess_deadbeefdeadbeef"
+	// Accepted via ?access_token= on the SSE route (unknown session resolves before the wait, not 401).
+	base := ts.URL + "/coddy/sessions/" + sid + "/composer-stream"
+	if got := authGET(t, base+"?access_token=stream-secret", ""); got == http.StatusUnauthorized {
+		t.Fatalf("composer-stream with valid access_token should not be 401")
+	}
+	// Rejected without any credential.
+	if got := authGET(t, base, ""); got != http.StatusUnauthorized {
+		t.Fatalf("composer-stream without token: %d want 401", got)
+	}
+	// The query token is NOT accepted on a non-SSE route.
+	if got := authGET(t, ts.URL+"/coddy/sessions/"+sid+"/messages?access_token=stream-secret", ""); got != http.StatusUnauthorized {
+		t.Fatalf("non-SSE route accepted query token: %d want 401", got)
+	}
+}

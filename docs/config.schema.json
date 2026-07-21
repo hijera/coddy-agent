@@ -424,6 +424,38 @@
           "type": "boolean",
           "description": "Silence the startup warning about a non-loopback bind without authentication.",
           "default": false
+        },
+        "cors": {
+          "type": "object",
+          "title": "CORS",
+          "description": "Cross-origin access so a browser UI on another origin can call this API (e.g. the bundled UI pointed at a remote server). Bearer auth still applies.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Handle CORS preflight and emit Access-Control-* headers for allowed origins.",
+              "default": false
+            },
+            "allowed_origins": {
+              "type": "array",
+              "description": "Exact origins permitted to call the API, e.g. \"http://localhost:5173\". A single \"*\" allows any origin.",
+              "items": { "type": "string" },
+              "default": []
+            }
+          }
+        },
+        "remotes": {
+          "type": "array",
+          "description": "Remote coddy http servers offered in the UI environment selector. Tokens are not stored here; the UI keeps them client-side per remote.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "description": "Display label for the remote." },
+              "url": { "type": "string", "description": "Base URL of the remote coddy http server, e.g. \"https://box.example:12345\"." }
+            }
+          },
+          "default": []
         }
       }
     },

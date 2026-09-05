@@ -88,8 +88,9 @@ type SubagentSpec struct {
 	TaskID string
 	// CWD is the working directory, normally the parent's.
 	CWD string
-	// Mode is agent, plan or ask, already narrowed against the parent: a
-	// read-only parent (plan, ask) forces its own mode on the child.
+	// Mode is a session mode (agent, plan or the fork's debug), already
+	// narrowed against the parent: a plan or debug parent forces its own mode
+	// on the child. Unknown values fall back to agent.
 	Mode string
 	// PermissionMode is the effective permission mode (already narrowed).
 	PermissionMode string
@@ -149,11 +150,8 @@ func (m *Manager) CreateSubagentSession(ctx context.Context, spec SubagentSpec) 
 	}
 
 	mode := ModeAgent
-	switch strings.ToLower(strings.TrimSpace(spec.Mode)) {
-	case string(ModePlan):
-		mode = ModePlan
-	case string(ModeAsk):
-		mode = ModeAsk
+	if norm := strings.ToLower(strings.TrimSpace(spec.Mode)); IsValidMode(norm) {
+		mode = Mode(norm)
 	}
 	state := &State{
 		ID:              id,

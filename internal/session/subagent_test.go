@@ -1337,4 +1337,16 @@ func TestReservedPrefixOnSessionNewAndReadOnlyChildSettings(t *testing.T) {
 	if st.GetMode() != "ask" {
 		t.Fatalf("ask child mode = %q", st.GetMode())
 	}
+	// Fork: a debug parent forces debug on its child, so the spec must carry
+	// every valid session mode through, not just agent/plan/ask.
+	debugChild := session.NewSubagentSessionID()
+	st, err = m.CreateSubagentSession(context.Background(), session.SubagentSpec{
+		ID: debugChild, ParentSessionID: parent.ID, Name: "reviewer", TaskID: "bg_3", CWD: root, Mode: "debug",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.GetMode() != "debug" {
+		t.Fatalf("debug child mode = %q", st.GetMode())
+	}
 }

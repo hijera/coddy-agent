@@ -1209,6 +1209,21 @@ func TestSpawnSubagentPlanParentForcesPlanMode(t *testing.T) {
 	}
 }
 
+func TestSpawnSubagentDebugParentForcesDebugMode(t *testing.T) {
+	rig := newSubagentRig(t, nil)
+	rig.approvedDefinition("builder", "mode: agent\n")
+	rig.setChildProvider(func(*session.State) llm.Provider { return scripted(answerStep("REPORT: mode")) })
+
+	rig.parent.SetMode(string(session.ModeDebug))
+	if _, err := rig.parentAgent().spawnSubagent(context.Background(), spawnReq("builder")); err != nil {
+		t.Fatal(err)
+	}
+	child := rig.childStates()[0]
+	if got := child.GetMode(); got != string(session.ModeDebug) {
+		t.Fatalf("child of a debug-mode parent runs in %q, want debug although the definition says agent", got)
+	}
+}
+
 func TestSpawnSubagentForegroundChildFollowsParentCancellation(t *testing.T) {
 	rig := newSubagentRig(t, nil)
 	rig.approvedDefinition("reviewer", "")

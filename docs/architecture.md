@@ -89,8 +89,8 @@ Maintains the state for each conversation session:
 
 The core reasoning engine (**`react.go`**):
 
-1. Loads tool definitions from **`internal/tooling.Registry.AllToolDefinitions`** and applies the session **`ToolSet`** from **`internal/agent/toolsets.go`** (empty set means no registry filtering). MCP tool definitions from connected servers are appended in **`agent`**, **`plan`**, and **`debug`**. Ask receives only MCP tools annotated with **`readOnlyHint: true`**, unless **`tools.ask_disable_extended_tools`** is enabled. Docs has a closed tool surface with no MCP.
-2. Builds the system prompt from **`internal/prompts.Render`**. The built-in defaults are assembled from reusable section fragments under **`internal/prompts/sections/`** (one ordered manifest per mode and provider family; see **`sections.go`**), so shared blocks like the agent body, the conditional footer, and the read/search and background guidance stay in one place instead of being forked per family. Custom files under **`prompts.dir`** keep the legacy one-file-per-mode shape and bypass section assembly. Configurable names **`prompts.agent_prompt`**, **`prompts.plan_prompt`**, and **`prompts.docs_prompt`** default to **`agent.md`**, **`plan.md`**, and **`docs.md`**; Ask uses **`ask.md`**. Model-specific and family-specific built-ins resolve to a notes fragment spliced into the mode manifest (for example the **`openai`** family adds **`agent/notes_openai`**; ask ships **`openai`** and **`gpt-oss`** alternate manifests). Template data includes **`CWD`**, tools markdown, skills markdown, rules markdown (**`{{.Rules}}`** via **`internal/rules`**), mode-specific plan/todo context, optional **`Memory`**, and **`UTCNow`** (RFC3339 UTC refreshed on every render). FoxxyCode then appends an **`<environment_context>`** block containing **`<os>`**, **`<arch>`**, and the detected **`<shell>`**, even when a custom prompt template is used.
+1. Loads tool definitions from **`internal/tooling.Registry.AllToolDefinitions`** and applies the session **`ToolSet`** from **`internal/agent/toolsets.go`** (empty set means no registry filtering). MCP tool definitions from connected servers are appended in **`agent`**, **`plan`**, and **`debug`**. Ask and docs have closed tool surfaces with no MCP.
+2. Builds the system prompt from **`internal/prompts.Render`**. The built-in defaults are assembled from reusable section fragments under **`internal/prompts/sections/`** (one ordered manifest per mode and provider family; see **`sections.go`**), so shared blocks like the agent body, the conditional footer, and the read/search and background guidance stay in one place instead of being forked per family. Custom files under **`prompts.dir`** keep the legacy one-file-per-mode shape and bypass section assembly. Configurable names **`prompts.agent_prompt`**, **`prompts.plan_prompt`**, **`prompts.docs_prompt`**, and **`prompts.ask_prompt`** default to **`agent.md`**, **`plan.md`**, **`docs.md`**, and **`ask.md`**. Model-specific and family-specific built-ins resolve to a notes fragment spliced into the mode manifest (for example the **`openai`** family adds **`agent/notes_openai`**; ask ships **`openai`** and **`gpt-oss`** alternate manifests). Template data includes **`CWD`**, tools markdown, skills markdown, rules markdown (**`{{.Rules}}`** via **`internal/rules`**), mode-specific plan/todo context, optional **`Memory`**, and **`UTCNow`** (RFC3339 UTC refreshed on every render). FoxxyCode then appends an **`<environment_context>`** block containing **`<os>`**, **`<arch>`**, and the detected **`<shell>`**, even when a custom prompt template is used.
 3. Prepends that system message to the session message list and appends the newest user turn.
 4. **Before every LLM invocation** inside one **`session/prompt`**, refreshes the **`system` message content** so **`TodoList`** and other template fields match state after prior tool calls in the same episode.
 5. Streams the LLM response, executes tool calls, appends assistant and tool messages.
@@ -267,9 +267,8 @@ Transports (dispatched by `mcp.Connect` over a shared `transport` interface):
 `mcp.Probe` backs the `/foxxycode/mcp` management API (connect, `tools/list`,
 close); `manage.go` resolves which file owns a server for enable/disable
 persistence. Tools from MCP servers are appended to the LLM tool list in
-**`agent`** and **`plan`** modes (see **`internal/agent/react.go`**), filtered
-per turn by the disable switches. Ask receives only tools explicitly annotated
-with **`readOnlyHint: true`** and only while its extended-tool setting is off.
+**`agent`**, **`plan`**, and **`debug`** modes (see **`internal/agent/react.go`**),
+filtered per turn by the disable switches. Ask and docs never receive MCP tools.
 
 ### Skills loader (`internal/skills`)
 
@@ -329,12 +328,9 @@ This is unrelated to the **`debug`** session mode below; the mode changes the mo
 - Suitable for: root-cause analysis, intermittent failures, regressions, and any bug where a guessed fix is worse than none
 
 ### `ask` mode
-- Read-only question-answering surface enforced by **`internal/agent.ToolSetForMode("ask")`** and execution-time guards
-- Basic tools: repository read/search/tree, interactive questions, and skills
-- By default, also exposes web search/fetch, read-only scheduler inspection, MCP tools whose server declares **`readOnlyHint: true`**, and a guarded shell command allowlist
-- Shell syntax that can chain commands, redirect output, perform substitution, or invoke a non-read command is refused before execution
-- **`tools.ask_disable_extended_tools: true`** hides shell, MCP, web, and scheduler tools while keeping the basic read-only set
-- No file/document writers, plan/todo mutators, scheduler mutations, SSH, browser automation, or memory mutations
+- Read-only question-answering surface enforced by **`internal/agent.ToolSetForMode("ask")`** and re-checked at execution time: a call that names a tool outside the set (for example one replayed from history recorded in agent mode) is refused with a read-only notice instead of run
+- Tools: **`read`**, **`keep_result`**, **`glob`**, **`grep`**, **`print_tree`**, **`websearch`**, **`webfetch`**, **`question`**, and **`load_skill`**
+- No shell, no plan/todo/config tools, no MCP tools, no file/document writers, no scheduler or SSH tools, no browser automation, and no memory mutations (the memory copilot runs its recall-only pass)
 - Suitable for: repository-grounded explanations, reviews, investigation, and user questions without changing project state
 
 Mode switching:

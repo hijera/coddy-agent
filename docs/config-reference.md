@@ -175,6 +175,7 @@ System prompt template overrides (`config.Prompts`, `internal/config/prompts.go`
 | `agent_prompt` | string | no | `agent.md` | Template file name for agent mode, inside `dir`. |
 | `plan_prompt` | string | no | `plan.md` | Template file name for plan mode, inside `dir`. |
 | `docs_prompt` | string | no | `docs.md` | Template file name for docs mode, inside `dir`. |
+| `ask_prompt` | string | no | `ask.md` | Template file name for ask mode, inside `dir`. |
 | `per_provider.enabled` | bool | no | `true` | Select a system prompt tuned to the active model for the current mode. Custom files resolve most-specific first: configured model-reference slug (e.g. `openai/gpt-4o` -> `ask.openai-gpt-4o.md`), provider-neutral API-model slug (e.g. `local/gpt-oss-20b` -> `ask.gpt-oss-20b.md`), per-family `<mode>.<family>.md`, then shared `<mode>.md`. Families: `anthropic`, `openai`, `gemini`, `gpt-oss`, `qwen`, `gemma`, `neuraldeep`. Built-in prompts use the same key order at fragment level; gpt-oss-20b and gpt-oss-120b have distinct profiles in Agent, Plan, Ask, and Docs modes. |
 
 ## `instructions`
@@ -260,7 +261,6 @@ Permission policy (`config.Tools`, `internal/config/tools.go`).
 | `command_allowlist` | string list | no | `[]` | Commands that never require permission. Exact or prefix match (prefix + space + args). `"*"` allows everything. |
 | `ssh_connect_timeout` | int | no | `30` | TCP dial timeout in seconds for the `ssh_run_command` tool. |
 | `plan_no_self_run` | bool | no | `false` | Forbid the model from starting to execute a plan itself. In plan mode `plan_exit` is not offered and any tool outside the plan allowlist is refused instead of run, so only **Run plan** starts the implementation. The `-plan-no-self-run` flag on `foxxycode acp` / `foxxycode http` overrides this value; the IntelliJ and VS Code plugins pass it, so their panels are guarded by default. |
-| `ask_disable_extended_tools` | bool | no | `false` | Hide Ask mode's read-only shell, web, annotated MCP, and scheduler inspection tools. Basic repository read/search/tree, question, and skill tools remain available. |
 | `output_limits` | object | no | — | Per-tool line and byte ceilings for results and errors. |
 | `background` | object | no | — | Bounds for commands the agent runs detached in the session background task pool. See below. |
 

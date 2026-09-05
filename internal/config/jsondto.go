@@ -151,6 +151,7 @@ type PromptsJSON struct {
 	Dir         string                  `json:"dir,omitempty"`
 	AgentPrompt string                  `json:"agent_prompt,omitempty"`
 	PlanPrompt  string                  `json:"plan_prompt,omitempty"`
+	AskPrompt   string                  `json:"ask_prompt,omitempty"`
 	PerProvider *PerProviderPromptsJSON `json:"per_provider,omitempty"`
 }
 
@@ -203,7 +204,6 @@ type ToolsJSON struct {
 	PermissionMode          string   `json:"permission_mode,omitempty"`
 	CommandAllowlist        []string `json:"command_allowlist,omitempty"`
 	PlanNoSelfRun           *bool    `json:"plan_no_self_run,omitempty"`
-	AskDisableExtendedTools bool     `json:"ask_disable_extended_tools,omitempty"`
 	// omitempty does not apply to structs; all-nil limits serialize as {}.
 	OutputLimits ToolOutputLimitsJSON `json:"output_limits"`
 	Background   ToolBackgroundJSON   `json:"background"`
@@ -376,7 +376,7 @@ func ConfigToJSONDTO(c *Config) *ConfigJSON {
 		LoopNudgeMax:           c.Agent.LoopNudgeMax,
 	}
 	out.Prompts = PromptsJSON{
-		Dir: c.Prompts.Dir, AgentPrompt: c.Prompts.AgentPrompt, PlanPrompt: c.Prompts.PlanPrompt,
+		Dir: c.Prompts.Dir, AgentPrompt: c.Prompts.AgentPrompt, PlanPrompt: c.Prompts.PlanPrompt, AskPrompt: c.Prompts.AskPrompt,
 	}
 	if c.Prompts.PerProvider.Enabled != nil {
 		out.Prompts.PerProvider = &PerProviderPromptsJSON{Enabled: c.Prompts.PerProvider.Enabled}
@@ -408,7 +408,6 @@ func ConfigToJSONDTO(c *Config) *ConfigJSON {
 		PermissionMode:          c.Tools.ResolvedPermMode(),
 		CommandAllowlist:        append([]string(nil), c.Tools.CommandAllowlist...),
 		PlanNoSelfRun:           c.Tools.PlanNoSelfRun,
-		AskDisableExtendedTools: c.Tools.AskDisableExtendedTools,
 		OutputLimits: ToolOutputLimitsJSON{
 			Read: c.Tools.OutputLimits.Read, Grep: c.Tools.OutputLimits.Grep,
 			Glob: c.Tools.OutputLimits.Glob, PrintTree: c.Tools.OutputLimits.PrintTree,
@@ -541,7 +540,7 @@ func JSONDTOToConfig(j *ConfigJSON, paths Paths) *Config {
 		LoopNudgeMax:           j.Agent.LoopNudgeMax,
 	}
 	cfg.Prompts = Prompts{
-		Dir: j.Prompts.Dir, AgentPrompt: j.Prompts.AgentPrompt, PlanPrompt: j.Prompts.PlanPrompt,
+		Dir: j.Prompts.Dir, AgentPrompt: j.Prompts.AgentPrompt, PlanPrompt: j.Prompts.PlanPrompt, AskPrompt: j.Prompts.AskPrompt,
 	}
 	if j.Prompts.PerProvider != nil {
 		cfg.Prompts.PerProvider = PerProviderPrompts{Enabled: j.Prompts.PerProvider.Enabled}
@@ -573,7 +572,6 @@ func JSONDTOToConfig(j *ConfigJSON, paths Paths) *Config {
 		PermissionMode:          j.Tools.PermissionMode,
 		CommandAllowlist:        append([]string(nil), j.Tools.CommandAllowlist...),
 		PlanNoSelfRun:           j.Tools.PlanNoSelfRun,
-		AskDisableExtendedTools: j.Tools.AskDisableExtendedTools,
 		OutputLimits: ToolOutputLimits{
 			Read: j.Tools.OutputLimits.Read, Grep: j.Tools.OutputLimits.Grep,
 			Glob: j.Tools.OutputLimits.Glob, PrintTree: j.Tools.OutputLimits.PrintTree,

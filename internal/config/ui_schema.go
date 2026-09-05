@@ -476,8 +476,6 @@ func UISchemaMap() map[string]interface{} {
 				},
 				"plan_no_self_run": boolProp("Forbid the model from running the plan itself",
 					"In plan mode, hide plan_exit and refuse any tool outside the plan allowlist, so only you can start the implementation from the plan card. Off by default; editor plugins turn it on."),
-				"ask_disable_extended_tools": boolPropDefault("Disable extended Ask tools",
-					"In Ask mode, hide read-only shell commands, web research, read-only MCP tools, and scheduler inspection tools. Repository read, search, tree, question, and skill tools remain available. Off by default.", false),
 				"output_limits": objectSchema("Tool output limits",
 					"Maximum lines each tool result or error may return into the LLM context. Positive limits also apply a 64 KiB per-call byte ceiling. 0 disables both limits; unset uses the built-in default.",
 					map[string]interface{}{
@@ -509,7 +507,7 @@ func UISchemaMap() map[string]interface{} {
 					[]string{"enabled", "max_concurrent", "default_timeout_seconds", "max_timeout_seconds", "output_buffer_bytes"},
 					nil),
 			},
-			[]string{"permission_mode", "command_allowlist", "plan_no_self_run", "ask_disable_extended_tools", "output_limits", "background"},
+			[]string{"permission_mode", "command_allowlist", "plan_no_self_run", "output_limits", "background"},
 			nil),
 		"mcp_servers": map[string]interface{}{
 			"type":        "array",
@@ -597,6 +595,7 @@ func UISchemaMap() map[string]interface{} {
 				"dir":          strProp("Prompts directory", "Optional override directory for prompt markdown files."),
 				"agent_prompt": strProp("Agent prompt file", "Filename for the main agent system prompt."),
 				"plan_prompt":  strProp("Plan prompt file", "Filename for plan-mode system prompt."),
+				"ask_prompt":   strProp("Ask prompt file", "Filename for ask-mode system prompt."),
 				"per_provider": objectSchema("Per-provider prompts",
 					"Select a system prompt tuned to the active model family (falls back to the shared prompt).",
 					map[string]interface{}{
@@ -605,7 +604,7 @@ func UISchemaMap() map[string]interface{} {
 					[]string{"enabled"},
 					nil),
 			},
-			[]string{"dir", "agent_prompt", "plan_prompt", "per_provider"},
+			[]string{"dir", "agent_prompt", "plan_prompt", "ask_prompt", "per_provider"},
 			nil),
 		"instructions": objectSchema("Instructions", "Files read from the session working directory and appended to the system prompt as project instructions (AGENTS.md-compatible).",
 			map[string]interface{}{

@@ -79,7 +79,7 @@ func (a *Agent) buildSystemPrompt(mode string, activeSkills []*skills.Skill, too
 	if a.cfg.Prompts.PerProviderEnabled() {
 		promptVariants = a.promptVariants()
 	}
-	full := prompts.RenderWithFallbackForVariants(mode, promptVariants, promptsDir, a.cfg.Prompts.AgentFile(), a.cfg.Prompts.PlanFile(), a.cfg.Prompts.DocsFile(), prompts.TemplateData{
+	full := prompts.RenderWithFallbackForVariants(mode, promptVariants, promptsDir, a.cfg.Prompts.AgentFile(), a.cfg.Prompts.PlanFile(), a.cfg.Prompts.DocsFile(), a.cfg.Prompts.AskFile(), prompts.TemplateData{
 		CWD:            a.state.GetCWD(),
 		Skills:         skillsMD,
 		Rules:          rulesMD,

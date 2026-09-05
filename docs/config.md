@@ -214,11 +214,6 @@ tools:
   # TCP dial timeout for SSH connections in seconds (default: 30).
   # ssh_connect_timeout: 30
 
-  # Keep Ask on basic repository-reading tools only (default: false).
-  # When false, Ask also exposes guarded read-only shell, web, annotated MCP,
-  # and scheduler inspection tools.
-  # ask_disable_extended_tools: false
-
 # HTTP OpenAI gateway (only with go build -tags=http). Embedded SPA on / needs -tags=http,ui too. See docs/http-api.md
 # httpserver:
 #   host: "127.0.0.1"

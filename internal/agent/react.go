@@ -28,7 +28,6 @@ import (
 	"github.com/hijera/foxxycode-agent/internal/session"
 	"github.com/hijera/foxxycode-agent/internal/skills"
 	"github.com/hijera/foxxycode-agent/internal/tools"
-	toolshell "github.com/hijera/foxxycode-agent/internal/tools/shell"
 )
 
 // SessionState is the interface Agent needs from a session.
@@ -949,37 +948,16 @@ func (a *Agent) executeToolCall(ctx context.Context, tc llm.ToolCall, env *tools
 	// permission path — are covered without threading state through.
 	a.activateScopedRulesForToolCall(tc.Name, tc.InputJSON, env.CWD)
 
-	// The mode allowlist filters the definitions sent to the model; enforce it here too
-	// so a call the model was never offered cannot run (tools.plan_no_self_run only).
-	askBasicOnly := a.cfg.Tools.AskDisableExtendedTools
-	if toolCallRefusedByMode(mode, tc.Name, a.cfg.Tools.PlanNoSelfRunEnabled(), askBasicOnly) {
+	// A restricted mode filters tool definitions before the LLM sees them, but a
+	// call replayed from history can still name a hidden tool; refuse it here so
+	// the mode boundary holds at execution time too.
+	if refusal, refused := toolCallRefusedByMode(mode, tc.Name, a.cfg.Tools.PlanNoSelfRunEnabled()); refused {
 		_ = a.server.SendSessionUpdate(sessionID, acp.ToolCallStatusUpdate{
 			SessionUpdate: acp.UpdateTypeToolCallUpdate,
 			ToolCallID:    tc.ID,
 			Status:        "cancelled",
 		})
-		return modeToolRefusalMessage(mode, tc.Name), nil
-	}
-	if mode == string(session.ModeAsk) {
-		if strings.Contains(tc.Name, "__") && !a.askMCPToolAllowed(tc.Name, askBasicOnly) {
-			_ = a.server.SendSessionUpdate(sessionID, acp.ToolCallStatusUpdate{
-				SessionUpdate: acp.UpdateTypeToolCallUpdate,
-				ToolCallID:    tc.ID,
-				Status:        "cancelled",
-			})
-			return modeToolRefusalMessage(mode, tc.Name), nil
-		}
-		if tc.Name == "run_command" {
-			command := permission.ExtractRunCommand(tc.InputJSON)
-			if err := toolshell.ValidateReadOnlyCommand(command); err != nil {
-				_ = a.server.SendSessionUpdate(sessionID, acp.ToolCallStatusUpdate{
-					SessionUpdate: acp.UpdateTypeToolCallUpdate,
-					ToolCallID:    tc.ID,
-					Status:        "cancelled",
-				})
-				return fmt.Sprintf("error: command is not available in Ask mode: %v", err), nil
-			}
-		}
+		return refusal, nil
 	}
 
 	sessionDir := ""
@@ -1167,8 +1145,7 @@ func (a *Agent) executeToolCall(ctx context.Context, tc llm.ToolCall, env *tools
 // configuration in force right now. It is called again after config_commit so a
 // tool the reload enabled or disabled reaches the model in the same turn.
 func (a *Agent) currentToolDefinitions(mode string) []llm.ToolDefinition {
-	askBasicOnly := a.cfg.Tools.AskDisableExtendedTools
-	toolSet := ToolSetForMode(mode, a.cfg.Tools.PlanNoSelfRunEnabled(), askBasicOnly)
+	toolSet := ToolSetForMode(mode, a.cfg.Tools.PlanNoSelfRunEnabled())
 	available := a.registry.AllToolDefinitions()
 	if a.configReloader == nil {
 		// Without a runtime reloader the staged config flow cannot commit, so
@@ -1184,25 +1161,24 @@ func (a *Agent) currentToolDefinitions(mode string) []llm.ToolDefinition {
 		available = filtered
 	}
 	defs := FilterToolDefinitions(available, toolSet)
-	if ModeAllowsMCPTools(mode, askBasicOnly) {
-		defs = append(defs, a.mcpToolDefinitions(mode, askBasicOnly)...)
+	if ModeAllowsMCPTools(mode) {
+		defs = append(defs, a.mcpToolDefinitions()...)
 	}
 	return defs
 }
 
 // mcpToolDefinitions converts the tools of connected MCP clients into LLM tool
-// definitions, applying both gates a caller must never skip: the configured
-// enable/disable filter and the fork's per-mode annotation filter. Shared by the
+// definitions, applying the configured enable/disable filter. Shared by the
 // main prompt path and the permission-resume path so the two cannot drift.
 //
-// Callers are responsible for checking ModeAllowsMCPTools first; this only
-// filters within a mode that gets MCP tools at all.
-func (a *Agent) mcpToolDefinitions(mode string, askBasicOnly bool) []llm.ToolDefinition {
+// Callers are responsible for checking ModeAllowsMCPTools first: docs and ask
+// never receive MCP definitions at all.
+func (a *Agent) mcpToolDefinitions() []llm.ToolDefinition {
 	allowed := a.state.GetMCPToolFilter()
 	var defs []llm.ToolDefinition
 	for _, client := range a.state.GetMCPClients() {
 		for _, t := range client.Tools() {
-			if !allowed(client.Name(), t.Name) || !MCPToolAllowedForMode(mode, askBasicOnly, t) {
+			if !allowed(client.Name(), t.Name) {
 				continue
 			}
 			defs = append(defs, t.ToLLMToolDefinition(client.Name()))
@@ -1223,26 +1199,6 @@ func (a *Agent) callMCPTool(ctx context.Context, serverName, toolName, argsJSON 
 		}
 	}
 	return "", fmt.Errorf("MCP server not found: %s", serverName)
-}
-
-func (a *Agent) askMCPToolAllowed(namespacedName string, basicOnly bool) bool {
-	idx := strings.Index(namespacedName, "__")
-	if idx <= 0 || idx >= len(namespacedName)-2 {
-		return false
-	}
-	serverName := namespacedName[:idx]
-	toolName := namespacedName[idx+2:]
-	for _, client := range a.state.GetMCPClients() {
-		if client.Name() != serverName {
-			continue
-		}
-		for _, tool := range client.Tools() {
-			if tool.Name == toolName {
-				return MCPToolAllowedForMode(string(session.ModeAsk), basicOnly, tool)
-			}
-		}
-	}
-	return false
 }
 
 // buildMessages constructs the message slice to send to the LLM.

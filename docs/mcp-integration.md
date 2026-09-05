@@ -13,9 +13,8 @@ additional tools and resources. MCP servers can be configured at these levels:
 3. **Per-session** - provided by the ACP client in `session/new` parameters
 
 Tools from all connected MCP servers are merged into the tool list passed to the LLM during
-the ReAct loop (in **`agent`** and **`plan`** modes). Ask exposes only tools whose MCP definition
-declares **`annotations.readOnlyHint: true`**, and hides all MCP tools when
-**`tools.ask_disable_extended_tools`** is enabled.
+the ReAct loop (in **`agent`**, **`plan`**, and **`debug`** modes). Ask and docs never receive MCP
+tools: MCP servers expose no enforceable read-only guarantee, so both closed surfaces leave them out.
 
 ## mcp.json (global and local)
 

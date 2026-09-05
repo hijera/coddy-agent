@@ -357,12 +357,10 @@ Best for: keeping README and `docs/` aligned with the code, updating operator gu
 
 Read-only question-answering and investigation mode:
 
-- Read, search, and inspect the workspace without file or documentation writers
-- Use guarded read-only shell commands, web search/fetch, scheduler inspection, and MCP tools annotated with **`readOnlyHint: true`**
-- Refuse shell chaining, output redirection, command substitution, and commands outside the read-only allowlist before execution
-- Never expose plan/todo mutations, scheduler mutations, SSH, browser automation, or memory mutations
-
-The **Disable extended Ask tools** checkbox in Settings → Tools sets **`tools.ask_disable_extended_tools`**. It is off by default. When enabled, Ask hides shell, MCP, web, and scheduler tools while retaining repository read/search/tree, questions, and skills.
+- The model is offered only **`read`**, **`keep_result`**, **`glob`**, **`grep`**, **`print_tree`**, **`websearch`**, **`webfetch`**, **`question`**, and **`load_skill`**
+- No shell, no plan/todo/config tools, no MCP tools, no file or documentation writers, no scheduler, SSH, browser automation, or memory mutations (the memory copilot runs recall-only)
+- A tool call outside that set (for example one replayed from history recorded in agent mode) is refused at execution time with a read-only notice instead of running
+- Running a saved plan through **`metadata.runPlanSlug`** or **Run plan** is refused with 409 in ask mode; switch to agent first
 
 Best for: answering repository questions, code reviews, and evidence-based investigation without changing project state.
 

@@ -196,17 +196,18 @@ func TestMCPToolDefinitionsAppliesBothFilters(t *testing.T) {
 		return out
 	}
 
-	got := names(newAgent().mcpToolDefinitions(string(session.ModeAgent), false))
+	got := names(newAgent().mcpToolDefinitions())
 	want := []string{"srv__echo", "srv__write", "other__echo"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("agent mode defs = %v, want %v", got, want)
 	}
 
-	// Ask drops the non-read-only tool on top of the disabled one.
-	got = names(newAgent().mcpToolDefinitions("ask", false))
-	want = []string{"srv__echo", "other__echo"}
-	if !slices.Equal(got, want) {
-		t.Fatalf("ask mode defs = %v, want %v", got, want)
+	// Ask never receives MCP definitions at all: the mode gate sits in front
+	// of mcpToolDefinitions, so the whole family disappears from the prompt.
+	if defs := newAgent().currentToolDefinitions("ask"); slices.ContainsFunc(defs, func(d llm.ToolDefinition) bool {
+		return strings.Contains(d.Name, "__")
+	}) {
+		t.Fatalf("ask mode must not offer MCP tools, got %v", names(defs))
 	}
 }
 
@@ -700,25 +701,24 @@ func TestDocsToolSetFiltersToReadAndDocsWrite(t *testing.T) {
 
 func TestModeAllowsMCPTools(t *testing.T) {
 	for _, tc := range []struct {
-		mode         string
-		askBasicOnly bool
-		want         bool
+		mode string
+		want bool
 	}{
 		{mode: "agent", want: true},
 		{mode: "plan", want: true},
+		{mode: "debug", want: true},
 		{mode: "docs", want: false},
-		{mode: "ask", want: true},
-		{mode: "ask", askBasicOnly: true, want: false},
+		{mode: "ask", want: false},
 	} {
-		t.Run(fmt.Sprintf("%s/basic=%v", tc.mode, tc.askBasicOnly), func(t *testing.T) {
-			if got := ModeAllowsMCPTools(tc.mode, tc.askBasicOnly); got != tc.want {
-				t.Fatalf("ModeAllowsMCPTools(%q, %v) = %v, want %v", tc.mode, tc.askBasicOnly, got, tc.want)
+		t.Run(tc.mode, func(t *testing.T) {
+			if got := ModeAllowsMCPTools(tc.mode); got != tc.want {
+				t.Fatalf("ModeAllowsMCPTools(%q) = %v, want %v", tc.mode, got, tc.want)
 			}
 		})
 	}
 }
 
-func TestAskToolSetIsReadOnlyAndExtendedByDefault(t *testing.T) {
+func TestAskToolSetFiltersToReadAndWeb(t *testing.T) {
 	r := tools.NewRegistry()
 	set := ToolSetForMode("ask", false)
 	filtered := FilterToolDefinitions(r.AllToolDefinitions(), set)
@@ -726,120 +726,46 @@ func TestAskToolSetIsReadOnlyAndExtendedByDefault(t *testing.T) {
 	for _, d := range filtered {
 		got[d.Name] = true
 	}
-	for _, want := range []string{
-		"read", "glob", "grep", "print_tree", "question", "load_skill",
-		"run_command", "websearch", "webfetch",
-	} {
+	for _, want := range []string{"read", "keep_result", "glob", "grep", "print_tree", "websearch", "webfetch", "question"} {
 		if !got[want] {
-			t.Errorf("Ask toolset should include %q", want)
+			t.Errorf("ask toolset should include %q", want)
 		}
 	}
 	for _, forbid := range []string{
-		"write", "edit", "apply_patch", "mkdir", "rm", "docs_write", "docs_edit",
-		"plan_write", "plan_exit", "ssh_run_command",
+		"write", "edit", "apply_patch", "mkdir", "rm", "run_command", "background_list",
+		"docs_write", "docs_edit", "plan_write", "plan_list", "plan_read", "plan_exit",
+		"config_get", "config_set", "ssh_run_command", "foxxycode_todo_plan_read",
+		"foxxycode_scheduler_jobs_list", "foxxycode_scheduler_job_create", "svn_status",
 	} {
 		if got[forbid] {
-			t.Errorf("Ask toolset must not include %q", forbid)
+			t.Errorf("ask toolset should not include %q", forbid)
 		}
 	}
 }
 
-func TestAskBasicToolsSettingDropsExtendedResearchTools(t *testing.T) {
-	set := ToolSetForMode("ask", false, true)
-	for _, want := range []string{"read", "glob", "grep", "print_tree", "question", "load_skill"} {
-		if !set.Allows(want) {
-			t.Errorf("basic Ask toolset should include %q", want)
-		}
+func TestToolCallRefusedByModeEnforcesAskOnly(t *testing.T) {
+	if msg, refused := toolCallRefusedByMode("ask", "write", false); !refused || !strings.Contains(msg, "Ask mode") {
+		t.Errorf("ask mode must refuse write at execution time, got refused=%v msg=%q", refused, msg)
 	}
-	for _, forbid := range []string{
-		"run_command", "websearch", "webfetch",
-		"foxxycode_scheduler_jobs_list", "foxxycode_scheduler_job_get", "foxxycode_scheduler_job_runs",
-	} {
-		if set.Allows(forbid) {
-			t.Errorf("basic Ask toolset should exclude %q", forbid)
-		}
+	if _, refused := toolCallRefusedByMode("ask", "mcp_server__lookup", false); !refused {
+		t.Error("ask mode must refuse MCP tool calls at execution time")
 	}
-}
-
-func TestAskToolSetOffersOnlyReadOnlySchedulerTools(t *testing.T) {
-	set := ToolSetForMode("ask", false)
-	for _, want := range []string{
-		"foxxycode_scheduler_jobs_list",
-		"foxxycode_scheduler_job_get",
-		"foxxycode_scheduler_job_runs",
-	} {
-		if !set.Allows(want) {
-			t.Errorf("Ask toolset should include read-only scheduler tool %q", want)
-		}
+	if _, refused := toolCallRefusedByMode("ask", "run_command", false); !refused {
+		t.Error("ask mode must refuse run_command at execution time")
 	}
-	for _, forbid := range []string{
-		"foxxycode_scheduler_job_create",
-		"foxxycode_scheduler_job_patch",
-		"foxxycode_scheduler_job_replace",
-		"foxxycode_scheduler_job_delete",
-		"foxxycode_scheduler_job_pause",
-		"foxxycode_scheduler_job_resume",
-		"foxxycode_scheduler_job_run",
-		"foxxycode_scheduler_job_cancel",
-	} {
-		if set.Allows(forbid) {
-			t.Errorf("Ask toolset must exclude mutating scheduler tool %q", forbid)
+	if _, refused := toolCallRefusedByMode("ask", "read", false); refused {
+		t.Error("ask mode must allow read")
+	}
+	for _, mode := range []string{"agent", "plan", "debug", "docs"} {
+		if _, refused := toolCallRefusedByMode(mode, "write", false); refused {
+			t.Errorf("%s mode must not enforce the ask refusal", mode)
 		}
 	}
 }
 
-func TestAskMCPToolsRequireReadOnlyAnnotation(t *testing.T) {
-	for _, tc := range []struct {
-		name          string
-		basicOnly     bool
-		tool          mcp.ToolInfo
-		wantAvailable bool
-	}{
-		{
-			name:          "annotated read-only tool",
-			tool:          mcp.ToolInfo{Name: "lookup", ReadOnly: true},
-			wantAvailable: true,
-		},
-		{
-			name: "explicitly mutating tool",
-			tool: mcp.ToolInfo{Name: "update"},
-		},
-		{
-			name:      "basic setting hides MCP",
-			basicOnly: true,
-			tool:      mcp.ToolInfo{Name: "lookup", ReadOnly: true},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := MCPToolAllowedForMode("ask", tc.basicOnly, tc.tool); got != tc.wantAvailable {
-				t.Fatalf("MCPToolAllowedForMode() = %v, want %v", got, tc.wantAvailable)
-			}
-		})
-	}
-}
-
-func TestAskModeEnforcesToolAllowlistAtExecutionBoundary(t *testing.T) {
-	for _, tc := range []struct {
-		tool      string
-		basicOnly bool
-		refused   bool
-	}{
-		{tool: "read"},
-		{tool: "run_command"},
-		{tool: "run_command", basicOnly: true, refused: true},
-		{tool: "websearch", basicOnly: true, refused: true},
-		{tool: "write", refused: true},
-		{tool: "docs_write", refused: true},
-		{tool: "foxxycode_scheduler_job_create", refused: true},
-	} {
-		if got := toolCallRefusedByMode("ask", tc.tool, false, tc.basicOnly); got != tc.refused {
-			t.Errorf("toolCallRefusedByMode(ask, %q, basic=%v) = %v, want %v",
-				tc.tool, tc.basicOnly, got, tc.refused)
-		}
-	}
-}
-
-func TestAskModeRefusesMutatingShellBeforeExecution(t *testing.T) {
+// A shell call replayed into an ask session is refused before it runs, whatever
+// the command: ask mode offers no shell at all.
+func TestAskModeRefusesShellBeforeExecution(t *testing.T) {
 	cwd := t.TempDir()
 	st := &session.State{
 		ID:   "sess_ask_shell_guard",
@@ -855,7 +781,7 @@ func TestAskModeRefusesMutatingShellBeforeExecution(t *testing.T) {
 		InputJSON: `{"command":"echo changed > created-by-ask.txt"}`,
 	}, env, string(session.ModeAsk), st.ID, false, 0)
 	if err != nil {
-		t.Fatalf("mutating shell call should be returned as a policy result, got error: %v", err)
+		t.Fatalf("shell call should be returned as a policy result, got error: %v", err)
 	}
 	if !strings.Contains(result, "not available in Ask mode") {
 		t.Fatalf("unexpected refusal result: %q", result)

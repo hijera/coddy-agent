@@ -64,6 +64,7 @@ func SchemaExampleConfigJSON() *ConfigJSON {
 			Dir:         "",
 			AgentPrompt: "agent.md",
 			PlanPrompt:  "plan.md",
+			AskPrompt:   "ask.md",
 			PerProvider: &PerProviderPromptsJSON{Enabled: &perProviderEnabled},
 		},
 		Instructions: InstructionsJSON{
@@ -84,7 +85,6 @@ func SchemaExampleConfigJSON() *ConfigJSON {
 			PermissionMode:          PermModeAsk,
 			CommandAllowlist:        nil,
 			PlanNoSelfRun:           &planNoSelfRun,
-			AskDisableExtendedTools: false,
 		},
 		Logger: LoggerJSON{
 			Level:    LogLevelInfo,

@@ -861,6 +861,12 @@
           "title": "Agent prompt file",
           "type": "string"
         },
+        "ask_prompt": {
+          "default": "ask.md",
+          "description": "Filename for ask-mode system prompt.",
+          "title": "Ask prompt file",
+          "type": "string"
+        },
         "dir": {
           "description": "Optional override directory for prompt markdown files.",
           "title": "Prompts directory",
@@ -896,6 +902,7 @@
         "dir",
         "agent_prompt",
         "plan_prompt",
+        "ask_prompt",
         "per_provider"
       ]
     },
@@ -1109,12 +1116,6 @@
       "additionalProperties": false,
       "description": "Filesystem and shell policy for built-in tools.",
       "properties": {
-        "ask_disable_extended_tools": {
-          "default": false,
-          "description": "In Ask mode, hide read-only shell commands, web research, read-only MCP tools, and scheduler inspection tools. Repository read, search, tree, question, and skill tools remain available. Off by default.",
-          "title": "Disable extended Ask tools",
-          "type": "boolean"
-        },
         "background": {
           "additionalProperties": false,
           "description": "Commands the agent runs detached in the session task pool instead of blocking a turn.",
@@ -1252,7 +1253,6 @@
         "permission_mode",
         "command_allowlist",
         "plan_no_self_run",
-        "ask_disable_extended_tools",
         "output_limits",
         "background"
       ]

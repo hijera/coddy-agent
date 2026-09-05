@@ -253,7 +253,7 @@ Mode selection
 
 - UI lets the user select the FoxxyCode profiles `agent`, `plan`, `docs`, `ask`, and `debug` from `GET /v1/models`.
 - Selected mode is sent as `model` field in `POST /v1/responses`.
-- Ask uses the green mode outline and remains non-mutating. **Settings → Tools → Disable extended Ask tools** is a schema-driven checkbox for `tools.ask_disable_extended_tools`; it is off by default. When enabled, Ask retains repository read/search/tree, question, and skill tools but hides shell, MCP, web, and scheduler inspection.
+- Ask uses the green mode outline and remains non-mutating: the model is offered only repository read/search/tree, web research, question, and skill tools, and any other tool call is refused at execution time. No settings knob.
 - Debug uses the red mode outline and has the same full tool surface as Agent; only its system prompt differs (diagnose, validate, confirm, then fix minimally). No settings knob.
 
 SSE payloads

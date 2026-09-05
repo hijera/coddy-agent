@@ -338,6 +338,20 @@ export const messagesRu: Record<string, string> = {
   "settings.backToSections": "К разделам",
   "settings.buildTagMissing":
     "В этой сборке не заработает: бинарь собран без тега «{tag}», инструментов в нём просто нет, и настройки ниже ни на что не влияют. Пересоберите с этим тегом (например make build TAGS=\"http ui browser\"), чтобы включить.",
+  "settings.reasoning.levelsFallback": "Уровни рассуждений",
+  "settings.reasoning.fetch": "Получить уровни ризонинга",
+  "settings.reasoning.fetching": "Получение уровней ризонинга…",
+  "settings.reasoning.useAuto": "Использовать автоопределение",
+  "settings.reasoning.autoDetected":
+    "Определяются автоматически по идентификатору модели. Нажмите «Получить уровни ризонинга», чтобы посмотреть или переопределить их.",
+  "settings.reasoning.overridden":
+    "Для этой модели предлагаются именно эти уровни вместо автоопределённых.",
+  "settings.reasoning.hidden":
+    "Пустой список: селектор рассуждений скрыт для этой модели. Нажмите «Использовать автоопределение», чтобы вернуть как было.",
+  "settings.reasoning.noneDetected":
+    "Для этого идентификатора уровни не определяются. Добавьте вручную, если провайдер их поддерживает.",
+  "settings.reasoning.fetchError":
+    "Не удалось получить уровни ризонинга: {error}. Добавьте их вручную ниже.",
   "settings.remove": "Удалить",
   "settings.add": "Добавить",
   "settings.showKey": "Показать",

@@ -6570,6 +6570,21 @@ textarea#composer {
   cursor: not-allowed;
 }
 
+/* Reasoning levels: the action row sits above the level list, so it keeps the
+   model-field control metrics but wraps instead of squeezing its buttons. */
+.reasoning-levels-actions {
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.reasoning-levels-actions .settings-btn {
+  flex: 0 0 auto;
+}
+
+[data-testid="reasoning-levels-field"] .settings-array {
+  margin-top: 8px;
+}
+
 .settings-array {
   list-style: none;
   margin: 0 0 8px;

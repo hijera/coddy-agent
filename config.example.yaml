@@ -85,7 +85,7 @@ models:
   # - model: "openai/gpt-5"
   #   max_tokens: 8192
   #   reasoning_default: medium       # level pre-selected for new chats (must be a valid level)
-  #   # reasoning_levels: [low, high] # optional: override the offered levels; [] hides the selector
+  #   # reasoning_levels: [low, high] # optional: override the offered levels; [] hides the selector; omit the key to auto-detect from the model id
 
   # NeuralDeep examples (reasoning levels auto-detect to low, medium, high).
   # - model: "neuraldeep/gpt-oss-120b"

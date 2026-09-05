@@ -336,6 +336,20 @@ export const messagesEn: Record<string, string> = {
   "settings.backToSections": "Back to sections",
   "settings.buildTagMissing":
     "This build cannot run it: the binary was compiled without the \"{tag}\" build tag, so the tools do not exist in it and the settings below have no effect. Rebuild with that tag (for example make build TAGS=\"http ui browser\") to switch it on.",
+  "settings.reasoning.levelsFallback": "Reasoning levels",
+  "settings.reasoning.fetch": "Fetch reasoning levels",
+  "settings.reasoning.fetching": "Fetching…",
+  "settings.reasoning.useAuto": "Use auto-detected",
+  "settings.reasoning.autoDetected":
+    "Auto-detected from the model id. Fetch the levels to review or override them.",
+  "settings.reasoning.overridden":
+    "These exact levels are offered for this model, instead of the auto-detected ones.",
+  "settings.reasoning.hidden":
+    "Empty list: the reasoning selector is hidden for this model. Use 'Use auto-detected' to go back.",
+  "settings.reasoning.noneDetected":
+    "This model id has no auto-detected reasoning levels. Add them by hand if the provider offers any.",
+  "settings.reasoning.fetchError":
+    "Couldn't fetch reasoning levels: {error}. Add them by hand below.",
   "settings.remove": "Remove",
   "settings.add": "Add",
   "settings.showKey": "Show",

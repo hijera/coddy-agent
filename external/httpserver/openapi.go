@@ -741,6 +741,43 @@ func openAPISpec() map[string]interface{} {
 					},
 				},
 			},
+			"/foxxycode/config/reasoning-levels": map[string]interface{}{
+				"get": map[string]interface{}{
+					"summary":     "Reasoning levels a model id offers (UI)",
+					"description": "Resolves the reasoning levels a logical model id would offer with **no** **`models[].reasoning_levels`** override configured, so the settings form can fill that field instead of relying on the operator knowing each family's tiers. Detection is model-id based (**`gpt-5*`** -> **`minimal,low,medium,high`**; OpenAI **`o`**-series, **`gpt-oss*`**, **`qwen3*`**, and Claude extended-thinking models -> **`low,medium,high`**). The provider type decides the Codex remap (**`minimal`** becomes **`none`**): **`provider_type`**, when sent, is the type currently chosen in the settings form and wins over the saved config, so an unsaved or just-retyped provider row is honoured; without it the **`model`** provider prefix is looked up in the active config. A model id with no reasoning support is **not** an error: it answers **`{\"ok\":true,\"levels\":[],\"detected\":false}`**. A malformed id (the form is mid-edit) answers **200** with **`ok:false`** and an **`error`** for inline display; only a missing **`model`** parameter is **400**, reported as the flat **`{\"ok\":false,\"error\":...}`** the other **`/foxxycode/config`** routes use.",
+					"operationId": "foxxycodeConfigReasoningLevelsGet",
+					"parameters": []interface{}{
+						map[string]interface{}{
+							"name":        "model",
+							"in":          "query",
+							"required":    true,
+							"description": "Logical model id in the form **`provider_name/api_model_id`**. It need not be saved in **`models[]`** yet.",
+							"schema":      map[string]interface{}{"type": "string"},
+							"example":     "valera/qwen3.8-27b",
+						},
+						map[string]interface{}{
+							"name":        "provider_type",
+							"in":          "query",
+							"required":    false,
+							"description": "Wire type of the provider currently chosen for this model in the settings form (**`openai`**, **`anthropic`**, **`neuraldeep`**, **`codex`**). Overrides the saved provider's type for the Codex remap so an unsaved or just-retyped provider row resolves correctly; omit to use the saved config.",
+							"schema":      map[string]interface{}{"type": "string"},
+							"example":     "codex",
+						},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "Resolved levels, or `ok:false` with `error` for a malformed model id",
+							"content": map[string]interface{}{
+								"application/json": map[string]interface{}{
+									"schema": map[string]interface{}{"$ref": "#/components/schemas/FoxxyCodeReasoningLevelsResponse"},
+								},
+							},
+						},
+						"400": foxxycodeConfigErrorResponse("Missing `model` query parameter"),
+						"500": foxxycodeConfigErrorResponse("Configuration unavailable"),
+					},
+				},
+			},
 			"/foxxycode/config": map[string]interface{}{
 				"get": map[string]interface{}{
 					"summary":     "Get current configuration as JSON",
@@ -2932,6 +2969,24 @@ func openAPISpec() map[string]interface{} {
 					},
 					"required": []string{"connected", "source"},
 				},
+				"FoxxyCodeReasoningLevelsResponse": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"ok":    map[string]string{"type": "boolean"},
+						"error": map[string]string{"type": "string"},
+						"model": map[string]string{"type": "string"},
+						"levels": map[string]interface{}{
+							"type":        "array",
+							"items":       map[string]string{"type": "string"},
+							"description": "Levels detected for this model id, in the order the composer offers them. Empty for a model without reasoning support.",
+						},
+						"detected": map[string]interface{}{
+							"type":        "boolean",
+							"description": "False when the model id matches no reasoning family, so the UI can say so instead of writing an override.",
+						},
+					},
+					"required": []string{"ok", "levels", "detected"},
+				},
 				"CodexAuthStatus": map[string]interface{}{
 					"type": "object",
 					"properties": map[string]interface{}{
@@ -3323,6 +3378,22 @@ func sessionBusyResponseRef() map[string]interface{} {
 	out := errorResponseRef()
 	out["description"] = "Session busy - another agent turn is in progress. `error.code` is `session_busy`, `error.sessionId` names the busy session, `error.turnActive` is true. Streaming requests wait up to 3s for the lock first, so a send issued right after `POST /foxxycode/sessions/{id}/cancel` succeeds while the cancelled turn unwinds."
 	return out
+}
+
+// foxxycodeConfigErrorResponse documents the flat {"ok":false,"error":...} body that
+// writeFoxxyCodeConfigErr emits for the /foxxycode/config routes, as opposed to the
+// OpenAI-style nested ErrorEnvelope used by the /v1 surface.
+func foxxycodeConfigErrorResponse(description string) map[string]interface{} {
+	return map[string]interface{}{
+		"description": description,
+		"content": map[string]interface{}{
+			"application/json": map[string]interface{}{
+				"schema": map[string]interface{}{
+					"$ref": "#/components/schemas/FoxxyCodeConfigValidateResponse",
+				},
+			},
+		},
+	}
 }
 
 func errorResponseRef() map[string]interface{} {

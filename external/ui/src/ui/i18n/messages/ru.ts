@@ -144,6 +144,13 @@ export const messagesRu: Record<string, string> = {
   "chat.heroVerb.automate": "автоматизировать",
   "chat.heroVerb.refactor": "рефакторить",
   "chat.heroVerb.plan": "спланировать",
+  "chat.subagentReadOnly.notice":
+    "Транскрипт субагента {name} доступен только для чтения. Запросы отправляются в родительский чат.",
+  "chat.subagentReadOnly.noticeUnnamed":
+    "Транскрипт субагента доступен только для чтения. Запросы отправляются в родительский чат.",
+  "chat.subagentReadOnly.openParent": "Открыть родительский чат",
+  "chat.subagentTitle": "Субагент {name}",
+  "chat.subagentTitleUnnamed": "Транскрипт субагента",
   "chat.newChat": "Новый чат",
   "chat.chatTitleAriaLabel": "Заголовок чата",
   "chat.exportLabel": "Скачать сессию",
@@ -734,6 +741,7 @@ export const messagesRu: Record<string, string> = {
   "messages.compactionBodyAriaLabel": "Содержимое сжатого контекста",
 
   // Строка живого статуса рядом с точками: «<глагол> <цель> · <время>».
+  "status.spawnAgent": "Запускаю субагента",
   "status.read": "Читаю",
   "status.list": "Смотрю каталог",
   "status.search": "Ищу",
@@ -877,6 +885,10 @@ export const messagesRu: Record<string, string> = {
   // Фоновые задачи (run_command background: true)
   "messages.toolBgTaskOpen": "Открыть в задачах",
   "messages.toolBgTaskStop": "Остановить",
+  "tasks.badge.agent": "агент",
+  "tasks.agentHeading": "Субагент",
+  "tasks.openTranscript": "Открыть транскрипт",
+  "tasks.openTranscriptUnavailable": "Дочерняя сессия ещё не известна",
   "tasks.panelTitle": "Фоновые задачи",
   "tasks.closePanel": "Закрыть фоновые задачи",
   "tasks.loading": "Загрузка…",

@@ -84,6 +84,7 @@ Maintains the state for each conversation session:
 - Working directory
 - Active context (skills + project rules in separate prompt sections)
 - In-memory plan entries for todo tools (**`session.Plan`**), mirrored to **`todos/active.md`** when persistence is enabled (**`filesystem.go`**)
+- Child sessions for subagent runs (**`sub_<hex>`** ids, **`subagent.go`**): **`CreateSubagentSession`**, **`RunSubagentTurn`** and **`RetireSubagentSession`** implement **`agent.SubagentRuntime`**, so a child is created, run for its one turn and retired through the manager, never built inside the agent. Every other prompt path against a child answers **`ErrSubagentReadOnly`** (**409** over HTTP); **`ListSnapshotsWith(ListOptions{IncludeSubagents: true})`** is the only listing that shows children; **`SessionTree`** / **`DeleteSessionTree`** remove a parent together with its descendants, stopping their tasks first. See **`docs/subagents.md`**.
 
 ### ReAct Agent Loop (`internal/agent`)
 
@@ -199,13 +200,19 @@ Built-in implementations are grouped in subfolders under **`internal/tools/`**:
 - **`internal/tools/todo`** - todo/plan list (**`foxxycode_todo_plan_read`**, **`foxxycode_todo_plan_replace`**,
   **`foxxycode_todo_plan_archive`**, **`foxxycode_todo_item_add`**, **`foxxycode_todo_item_remove`**,
   **`foxxycode_todo_item_update`**, **`foxxycode_todo_item_move`**)
+- **`internal/tools/spawn_agent.go`** - **`spawn_agent`**, delegation of a self-contained task to a subagent
+  (registered when **`subagents.enabled`**). The tool only forwards to the **`tooling.Env.SpawnAgent`** hook
+  that **`internal/agent`** wires, so the registry stays below the session layer; the runtime, the project
+  trust check and the child session live in **`internal/agent/subagent.go`**, **`internal/subagents`** and
+  **`internal/session`**. It is offered in **`agent`**, **`plan`** and **`debug`** turns and never in **`ask`**
+  or **`docs`**. See **`docs/subagents.md`**.
 
 **Tool exposure** - **`internal/agent/toolsets.go`** defines a **`ToolSet`** name allowlist per mode. An **empty** `ToolSet` means no registry filtering. **Plan** and **Docs** use fixed registry allowlists; **`ModeAllowsMCPTools`** separately limits MCP exposure to Agent and Plan.
 
 Agents see:
 
 - **`agent`** mode - every built-in registered by **`internal/tools.NewRegistryFor`** (filesystem, shell, todo, optional scheduler tools, **`websearch`**, **`webfetch`**, **`question`**, **`plan_exit`**, etc.) plus MCP tools from connected servers.
-- **`plan`** mode - **`read`**, **`glob`**, **`grep`**, **`print_tree`**, **`websearch`**, **`webfetch`**, **`run_command`**, **`question`**, **`plan_write`**, **`plan_list`**, **`plan_read`**, and the read-only **`svn_info`** / **`svn_status`** / **`svn_diff`** / **`svn_log`** / **`svn_list`**, plus MCP tools. General workspace writes, todo tools, scheduler tools, and memory tools are not advertised to the LLM.
+- **`plan`** mode - **`read`**, **`glob`**, **`grep`**, **`print_tree`**, **`websearch`**, **`webfetch`**, **`run_command`**, **`question`**, **`plan_write`**, **`plan_list`**, **`plan_read`**, **`spawn_agent`** (a child of a plan-mode parent stays in plan mode), and the read-only **`svn_info`** / **`svn_status`** / **`svn_diff`** / **`svn_log`** / **`svn_list`**, plus MCP tools. General workspace writes, todo tools, scheduler tools, and memory tools are not advertised to the LLM.
 - **`docs`** mode - **`read`**, **`glob`**, **`grep`**, **`websearch`**, **`webfetch`**, **`question`**, **`docs_write`**, and **`docs_edit`**. It receives neither **`run_command`** nor MCP tools, so its only built-in mutations are the guarded Markdown writers.
 
 The Docs writers accept only **`.md`** paths inside the session CWD, reject paths that escape after resolving symlinks, and protect **`internal/prompts/`**. **`docs_write`** requires **`overwrite: true`** before replacing an existing file; **`docs_edit`** requires a non-empty exact **`oldString`** that is unique unless **`replaceAll`** is set. The Docs prompt also treats review-only requests as non-mutating and requires an explicit user request before changing documentation.
@@ -273,6 +280,10 @@ filtered per turn by the disable switches. Ask and docs never receive MCP tools.
 ### Skills loader (`internal/skills`)
 
 Loads `SKILL.md` from configured `skills.dirs` (see `docs/skills.md`). Default dirs (lowest → highest priority): **`~/.agents/skills`** (global, shared with `npx skills`/`npx skillsbd`), **`~/.foxxycode/skills`** (foxxycode-specific), **`${CWD}/.foxxycode/skills`** (project-local). Later dirs override earlier ones when the same skill name appears in multiple locations. Bundled **`/generate-rules`** is always prepended.
+
+### Subagents (`internal/subagents`)
+
+Loads subagent definitions - markdown files with YAML frontmatter whose body is a child agent's role - from **`subagents.dirs`** (defaults **`${FOXXYCODE_HOME}/agents`**, **`${CWD}/.claude/agents`**, **`${CWD}/.foxxycode/agents`**; later dirs override earlier ones by name, and the two built-ins **`general`** and **`explore`** sit below all of them), decides each file's **scope** on canonical paths (**`project`** inside the workspace, **`user`** elsewhere), holds the **trust receipts** for project-scope files (**`TrustStore`**, **`<home>/subagents-trust.json`**, keyed by canonical workspace, name and file digest; policy **`subagents.project_trust`**), bounds concurrent runs with a process-wide **`Limiter`**, and renders the **catalog** (the prompt block for the parent model, the table for **`foxxycode agents list`**, the rows for **`GET /foxxycode/subagents`**). It also owns the pure narrowing rules: permission mode never widens, the child's tool set is an intersection with the parent's, timeouts resolve like the pool's. The package knows nothing about sessions or the loop; **`internal/agent/subagent.go`** applies its decisions, runs the child through the session manager and registers the run in **`internal/bgtask`** with **`Pool.Launch`**. Guide: **`docs/subagents.md`**.
 
 ### Rules engine (`internal/rules`)
 

@@ -146,6 +146,13 @@ export const messagesEn: Record<string, string> = {
   "chat.heroVerb.automate": "automate",
   "chat.heroVerb.refactor": "refactor",
   "chat.heroVerb.plan": "plan",
+  "chat.subagentReadOnly.notice":
+    "Read-only transcript of subagent {name}. Prompts go to the parent chat.",
+  "chat.subagentReadOnly.noticeUnnamed":
+    "Read-only subagent transcript. Prompts go to the parent chat.",
+  "chat.subagentReadOnly.openParent": "Open parent chat",
+  "chat.subagentTitle": "Subagent {name}",
+  "chat.subagentTitleUnnamed": "Subagent transcript",
   "chat.newChat": "New chat",
   "chat.chatTitleAriaLabel": "Chat title",
   "chat.exportLabel": "Download session",
@@ -728,6 +735,7 @@ export const messagesEn: Record<string, string> = {
 
   // Live status line next to the typing dots. Rendered as "<verb> <target> · <elapsed>",
   // so verbs stay short and take no trailing ellipsis (a target follows most of them).
+  "status.spawnAgent": "Running subagent",
   "status.read": "Reading",
   "status.list": "Listing",
   "status.search": "Searching",
@@ -866,6 +874,10 @@ export const messagesEn: Record<string, string> = {
   // Background tasks (run_command background: true)
   "messages.toolBgTaskOpen": "Open in Tasks",
   "messages.toolBgTaskStop": "Stop",
+  "tasks.badge.agent": "agent",
+  "tasks.agentHeading": "Subagent",
+  "tasks.openTranscript": "Open transcript",
+  "tasks.openTranscriptUnavailable": "The child session is not known yet",
   "tasks.panelTitle": "Background tasks",
   "tasks.closePanel": "Close background tasks",
   "tasks.loading": "Loading…",

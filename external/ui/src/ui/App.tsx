@@ -56,6 +56,10 @@ import {
 import { pinPlanDocumentsToTurnEnd } from "./chat/planDocumentPlacement";
 import { pickStreamMutationBase } from "./chat/streamMutationBase";
 import { ShadowTranscriptCache } from "./chat/sessionTranscriptCache";
+import {
+  parseSubagentTranscriptMeta,
+  type SubagentTranscriptMeta,
+} from "./chat/subagentTranscript";
 import { shouldApplyTranscriptSnapshot } from "./chat/transcriptSnapshotGuard";
 import {
   mergePermissionPromptsIntoTranscript,
@@ -1425,6 +1429,10 @@ export function App() {
     [],
   );
 
+  /** Set while the viewed session is a subagent's transcript (read-only, no composer). */
+  const [subagentTranscript, setSubagentTranscript] =
+    useState<SubagentTranscriptMeta | null>(null);
+
   const currentTitle = useMemo(() => {
     if (!sessionId) {
       return t("chat.newChat");
@@ -1437,8 +1445,18 @@ export function App() {
     }
     const row = sessions.find((s) => s.id === sessionId);
     const title = (row?.title || "").trim();
-    return title || t("chat.newChat");
-  }, [sessionId, sessions, describePreview, locale]);
+    if (title) {
+      return title;
+    }
+    // A child session has no History row to name it, so name it by its role.
+    if (subagentTranscript) {
+      const name = subagentTranscript.name.trim();
+      return name
+        ? t("chat.subagentTitle", { name })
+        : t("chat.subagentTitleUnnamed");
+    }
+    return t("chat.newChat");
+  }, [sessionId, sessions, describePreview, locale, subagentTranscript]);
 
   const currentSessionCwd = useMemo(() => {
     const sid = sessionId.trim();
@@ -2543,6 +2561,12 @@ export function App() {
       selectedModelId?: string;
       selectedReasoning?: string;
       memoryTurns?: MemoryTurnApi[];
+      subagent?: {
+        parentSessionId?: string;
+        name?: string;
+        taskId?: string;
+      } | null;
+      readOnly?: boolean;
       uiLog?: Array<{
         id?: string;
         level?: string;
@@ -2574,6 +2598,8 @@ export function App() {
         model: (res.data.model || res.data.selectedModelId || "").trim(),
         reasoning: (res.data.selectedReasoning || "").trim(),
       });
+      // A child session locks the composer; an ordinary one carries no marker.
+      setSubagentTranscript(parseSubagentTranscriptMeta(res.data));
     }
     type UILogRow = {
       id: string;
@@ -3173,6 +3199,7 @@ export function App() {
     setEditingUserMsgIdx(null);
     setEditingAssetNote("");
     setEditingFiles([]);
+    setSubagentTranscript(null);
     if (!sessionId) {
       setItems([]);
       setDraft("");
@@ -4612,6 +4639,16 @@ export function App() {
     }
   }, [sessionId]);
 
+  /** Opens a session in this tab: the child transcript behind an agent task,
+   *  or the parent chat from a read-only notice. Same path as a History pick,
+   *  so the panel closes and the hash becomes `#/s/<id>`. */
+  const openSessionInPlace = (targetId: string) => {
+    const id = targetId.trim();
+    if (id) {
+      pickSession(id);
+    }
+  };
+
   const openSettingsFromNav = useCallback(() => {
     setSchedulerOpen(false);
     setSchedulerEditor(null);
@@ -4920,6 +4957,7 @@ export function App() {
             nowMs={backgroundNowMs}
             onClose={closeTasksDrawer}
             onOpenTask={openBackgroundTask}
+            onOpenSession={openSessionInPlace}
             onBackToList={backToBackgroundTaskList}
             onStopTask={(id) => {
               void stopBackgroundTaskById(id);
@@ -4938,6 +4976,8 @@ export function App() {
           backgroundNowMs={backgroundNowMs}
           onOpenBackgroundTask={openBackgroundTask}
           onStopBackgroundTask={handleStopBackgroundTask}
+          subagentTranscript={subagentTranscript}
+          onOpenSession={openSessionInPlace}
           workspaceCtx={workspaceCtx}
           worktreePref={worktreePref}
           svnFolderPref={svnFolderPref}
@@ -5002,41 +5042,48 @@ export function App() {
               ),
             );
           }}
-          onPlanDocumentRun={(slug) => {
-            if (
-              sessionId.trim() &&
-              activeComposerSidRef.current.has(sessionId.trim())
-            ) {
-              return;
-            }
-            void streamResponses(t("chat.runPlanMessage"), {
-              modeOverride: "agent",
-              runPlanSlug: slug,
-            });
-          }}
-          onPlanDocumentDiscard={async (itemId, slug) => {
-            const sid = sessionId.trim();
-            if (!sid) return;
-            try {
-              await fetch(
-                `/foxxycode/sessions/${encodeURIComponent(sid)}/plans/${encodeURIComponent(slug)}`,
-                {
-                  method: "DELETE",
-                  headers,
+          // A subagent transcript is read-only: like onEdit below, Run plan and
+          // Discard are withheld rather than stubbed, so the plan card renders
+          // without its footer and its editor is read-only.
+          {...(subagentTranscript
+            ? {}
+            : {
+                onPlanDocumentRun: (slug: string) => {
+                  if (
+                    sessionId.trim() &&
+                    activeComposerSidRef.current.has(sessionId.trim())
+                  ) {
+                    return;
+                  }
+                  void streamResponses(t("chat.runPlanMessage"), {
+                    modeOverride: "agent",
+                    runPlanSlug: slug,
+                  });
                 },
-              );
-            } catch {
-              return;
-            }
-            setItems((prev) =>
-              prev.map((x) =>
-                x.id === itemId && x.type === "plan_document"
-                  ? { ...x, discarded: true }
-                  : x,
-              ),
-            );
-          }}
-          onEdit={handleEditUserMessage}
+                onPlanDocumentDiscard: async (itemId: string, slug: string) => {
+                  const sid = sessionId.trim();
+                  if (!sid) return;
+                  try {
+                    await fetch(
+                      `/foxxycode/sessions/${encodeURIComponent(sid)}/plans/${encodeURIComponent(slug)}`,
+                      {
+                        method: "DELETE",
+                        headers,
+                      },
+                    );
+                  } catch {
+                    return;
+                  }
+                  setItems((prev) =>
+                    prev.map((x) =>
+                      x.id === itemId && x.type === "plan_document"
+                        ? { ...x, discarded: true }
+                        : x,
+                    ),
+                  );
+                },
+              })}
+          {...(subagentTranscript ? {} : { onEdit: handleEditUserMessage })}
           {...(editingFiles.length > 0 ? { editingFiles } : {})}
           onBranchSwitch={(sid) => switchBranch(sid)}
           {...(knownSkillNames.size > 0 ? { knownSkillNames } : {})}
@@ -5053,6 +5100,10 @@ export function App() {
             }
           }}
           onSend={(text: string, files?: File[]) => {
+            // A subagent transcript is read-only: the server answers 409.
+            if (subagentTranscript) {
+              return;
+            }
             if (
               sessionId.trim() &&
               activeComposerSidRef.current.has(sessionId.trim())

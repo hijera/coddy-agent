@@ -1,6 +1,6 @@
 import React from "react";
-import { afterEach, expect, test } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { afterEach, expect, test, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ChatScreen } from "./ChatScreen";
 
 afterEach(() => cleanup());
@@ -156,4 +156,64 @@ test("a whitespace-only assistant answer does not offer the download", () => {
   );
 
   expect(container.querySelector(".session-export")).toBeNull();
+});
+
+const childTranscript = {
+  parentSessionId: "s_parent",
+  name: "explore",
+  taskId: "bg_3",
+};
+
+test("a subagent transcript replaces the docked composer with a read-only notice", () => {
+  const onOpenSession = vi.fn();
+  const { container } = render(
+    <ChatScreen
+      title="agent explore"
+      sessionId="sub_0a1b2c"
+      heroAccentVerb="know"
+      heroComposerFocusEpoch={0}
+      onTitleSave={() => {}}
+      items={[{ type: "user_message", id: "1", content: "survey the repo" }]}
+      draft=""
+      tokenUsage={null}
+      mode="agent"
+      modes={["agent", "plan"]}
+      onModeChange={() => {}}
+      onDraftChange={() => {}}
+      onSend={() => {}}
+      subagentTranscript={childTranscript}
+      onOpenSession={onOpenSession}
+    />,
+  );
+
+  expect(container.querySelector(".composer-card")).toBeNull();
+  expect(screen.getByTestId("subagent-readonly-notice")).toHaveTextContent(
+    "Read-only transcript of subagent explore",
+  );
+  fireEvent.click(screen.getByTestId("subagent-readonly-parent-link"));
+  expect(onOpenSession).toHaveBeenCalledWith("s_parent");
+});
+
+test("the notice also takes the hero composer's slot on an empty child transcript", () => {
+  const { container } = render(
+    <ChatScreen
+      title=""
+      sessionId="sub_0a1b2c"
+      heroAccentVerb="know"
+      heroComposerFocusEpoch={0}
+      onTitleSave={() => {}}
+      items={[]}
+      draft=""
+      tokenUsage={null}
+      mode="agent"
+      modes={["agent", "plan"]}
+      onModeChange={() => {}}
+      onDraftChange={() => {}}
+      onSend={() => {}}
+      subagentTranscript={childTranscript}
+    />,
+  );
+
+  expect(container.querySelector(".composer-card")).toBeNull();
+  expect(screen.getByTestId("subagent-readonly-notice")).toBeInTheDocument();
 });

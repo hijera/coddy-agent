@@ -234,6 +234,12 @@ test("toolCallTargetText returns empty without usable arguments", () => {
   expect(toolCallTargetText({ title: "read", argsText: "not json" })).toBe("");
   expect(toolCallTargetText({ title: "read", argsText: "{}" })).toBe("");
   expect(
+    toolCallTargetText({
+      title: "spawn_agent",
+      argsText: '{"agent":"reviewer","prompt":"review the diff"}',
+    }),
+  ).toBe("reviewer");
+  expect(
     toolCallTargetText({ title: "question", argsText: '{"path":"a.ts"}' }),
   ).toBe("");
 });

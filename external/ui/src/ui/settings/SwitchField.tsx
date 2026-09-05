@@ -40,11 +40,15 @@ export function SwitchField({
   const labelId = `${baseId}-label`;
   return (
     <div
-      className={
-        className
-          ? `settings-switch-field ${className}`
-          : "settings-switch-field"
-      }
+      className={[
+        "settings-switch-field",
+        // Chromium 104 (JCEF) has no :has(); the marker class stands in for
+        // `:has(.skill-switch:disabled)` so the label loses its pointer cursor.
+        disabled ? "settings-switch-field--disabled" : "",
+        className ?? "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       <Switch
         id={switchId}

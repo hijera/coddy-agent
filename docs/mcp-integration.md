@@ -89,6 +89,17 @@ child, not on what is in them.
 Listing servers is gated too: probing an unapproved entry would start exactly the command the
 approval is about, so `GET /foxxycode/mcp` reports it (`status: needs_approval`) instead.
 
+Subagent definitions found inside the workspace (`.foxxycode/agents`, `.claude/agents`) follow the
+same model with a **sibling store**: policy `subagents.project_trust` (`ask` / `allow` / `deny`),
+receipts in `~/.foxxycode/subagents-trust.json` keyed by the same canonical workspace path plus the
+definition name and a digest of the file, approved with `foxxycode agents trust <name>` or
+`POST /foxxycode/subagents/{name}/trust`. The two files are deliberately separate so an MCP approval
+never reads as an agent approval or the reverse. A child agent that may use MCP tools does not
+borrow the parent's connections: configured servers are re-resolved for the child's cwd
+**through this trust gate**, exactly as for a new session, and the parent's ACP client-supplied
+servers are redialed ungated, as the original connect was. A child whose tool set cannot contain
+MCP names (the built-in `explore`) never dials anything. See `docs/subagents.md`.
+
 ## Enable / disable switches
 
 Every config level supports switching off a whole server or individual tools without

@@ -4000,12 +4000,7 @@ export function App() {
         stream: true,
       };
       const atts = extractAtFileAttachments(text);
-      const profileModel =
-        mode === "agent" ||
-        mode === "plan" ||
-        mode === "docs" ||
-        mode === "ask" ||
-        mode === "debug";
+      const profileModel = (PROFILE_MODES as readonly string[]).includes(mode);
       if (atts.length > 0 && profileModel) {
         // A ranged mention attaches the pasted literal when we still hold it;
         // otherwise the backend reads the line range from the file.

@@ -18,6 +18,7 @@ Paired HTTP and ACP scripts share the same stem after the prefix:
 | **`e2e_scheduler_api`** | **`httpserver/http_e2e_scheduler_api.py`** | (REST is HTTP-only) |
 | **`e2e_scheduler_agent`** | **`httpserver/http_e2e_scheduler_agent.py`** | **`acp/acp_e2e_scheduler_agent.py`** |
 | **`e2e_plan_files`** | **`httpserver/http_e2e_plan_files.py`** | **`acp/acp_e2e_plan_files.py`** |
+| **`e2e_ask_mode`** | **`httpserver/http_e2e_ask_mode.py`** (ask profile reads, never writes; agent on the same session writes) | **`acp/acp_e2e_ask_mode.py`** (`session/set_mode` ask, then agent) |
 | **`e2e_config`** | **`httpserver/http_e2e_config.py`** (stage, confirm-commit, rollback; server config ends unchanged) | **`acp/acp_e2e_config.py`** (temp config copy; staged file, commit snapshot, rollback) |
 
 ## Layout
@@ -28,7 +29,7 @@ Paired HTTP and ACP scripts share the same stem after the prefix:
 | **`build_foxxycode.sh`** | **`make build TAGS="http scheduler memory"`** then **`./build/foxxycode -v`**. |
 | **`httpserver/`** | HTTP Python harnesses, **`test_httpserver.sh`**, **`docker.sh`**. |
 | **`acp/`** | ACP Python harnesses and **`test_acp.sh`**. |
-| **`shared/`** | **`scheduler_e2e_common.py`**, **`plan_e2e_common.py`** for paired e2e harnesses. |
+| **`shared/`** | **`scheduler_e2e_common.py`**, **`plan_e2e_common.py`**, **`ask_e2e_common.py`** for paired e2e harnesses. |
 | **`skills_fixture/`** | Bundled skill for slash-command HTTP demo (copied into **`$FOXXYCODE_HOME/skills_fixture`** by **`test_httpserver.sh`**). |
 
 ## HTTP gateway
@@ -42,7 +43,7 @@ From the repository root:
 
 Optional port: **`./examples/test_httpserver.sh 19900`**.
 
-**`test_httpserver.sh`** order: **`http_smoke_gateway`**, **`http_e2e_scheduler_api`** (REST CRUD plus on-disk **`$FOXXYCODE_HOME/scheduler/*.md`**), **`http_e2e_models`**, **`http_e2e_web`**, **`http_e2e_todo`**, **`http_e2e_memory`**, **`http_e2e_skills_slash`**, **`http_e2e_background`**, **`http_e2e_toolcalls_persist`**, **`http_e2e_scheduler_agent`**, **`http_e2e_plan_files`** (plan mode **`plan_write`** to **`plans/e2e-plan.plan.md`**, then **`metadata.runPlanSlug`**), **`http_e2e_config`** (staged uci-like config edit, confirm-commit, rollback from the snapshot; the server config ends the script unchanged). All steps run every time and need a working models backend where the LLM is called.
+**`test_httpserver.sh`** order: **`http_smoke_gateway`**, **`http_e2e_scheduler_api`** (REST CRUD plus on-disk **`$FOXXYCODE_HOME/scheduler/*.md`**), **`http_e2e_models`**, **`http_e2e_web`**, **`http_e2e_todo`**, **`http_e2e_memory`**, **`http_e2e_skills_slash`**, **`http_e2e_background`**, **`http_e2e_toolcalls_persist`**, **`http_e2e_scheduler_agent`**, **`http_e2e_plan_files`** (plan mode **`plan_write`** to **`plans/e2e-plan.plan.md`**, then **`metadata.runPlanSlug`**), **`http_e2e_ask_mode`** (**`model: ask`** reads the note and refuses the write, **`model: agent`** on the same session writes it), **`http_e2e_config`** (staged uci-like config edit, confirm-commit, rollback from the snapshot; the server config ends the script unchanged). All steps run every time and need a working models backend where the LLM is called.
 
 Docker-only smoke:
 
@@ -57,7 +58,7 @@ Docker-only smoke:
 ./examples/test_acp.sh
 ```
 
-Order: **`acp_smoke_gateway`**, **`acp_e2e_models`**, **`acp_e2e_web`**, **`acp_e2e_todo`**, **`acp_e2e_skills_slash`**, **`acp_e2e_config`** (staged config edit into a temp config copy, confirm-commit, rollback), **`acp_e2e_memory`**, **`acp_e2e_background`**, **`acp_e2e_toolcalls_persist`**, **`acp_e2e_scheduler_agent`**, **`acp_e2e_plan_files`** (plan file on disk plus run via **`_meta.foxxycode.dev/runPlanSlug`**).
+Order: **`acp_smoke_gateway`**, **`acp_e2e_models`**, **`acp_e2e_web`**, **`acp_e2e_todo`**, **`acp_e2e_skills_slash`**, **`acp_e2e_config`** (staged config edit into a temp config copy, confirm-commit, rollback), **`acp_e2e_memory`**, **`acp_e2e_background`**, **`acp_e2e_toolcalls_persist`**, **`acp_e2e_scheduler_agent`**, **`acp_e2e_plan_files`** (plan file on disk plus run via **`_meta.foxxycode.dev/runPlanSlug`**), **`acp_e2e_ask_mode`** (**`session/set_mode`** **`ask`**: read-only tool calls and no artifact, then **`agent`** writes it).
 
 Environment overrides: **`FOXXYCODE_BIN`**, **`FOXXYCODE_CONFIG`**, **`SESSION_ROOT`**, **`SESSION_ID`**, **`BASE_URL`**, **`MODEL`**, etc. (see each script docstring).
 

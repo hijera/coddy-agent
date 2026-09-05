@@ -3,12 +3,22 @@ export type TodoPlanEntry = {
   status: string;
 };
 
-export type TodoToolPreview = {
-  variant: "item" | "plan";
-  header: string;
-  meta: string[];
-  entries: TodoPlanEntry[];
-};
+// Counts only: the caller localizes the header and meta line (the fork routes
+// every visible string through t()/tp(), so this module stays pure).
+export type TodoToolPreview =
+  | {
+      variant: "item";
+      /** 1-based position of the updated row. */
+      position: number;
+      total: number;
+      entries: TodoPlanEntry[];
+    }
+  | {
+      variant: "plan";
+      completed: number;
+      total: number;
+      entries: TodoPlanEntry[];
+    };
 
 type TodoToolPreviewInput = {
   toolName: string;
@@ -83,8 +93,8 @@ export function buildTodoToolPreview(
     }
     return {
       variant: "item",
-      header: "Updated item",
-      meta: [`${index + 1} of ${entries.length}`],
+      position: index + 1,
+      total: entries.length,
       entries: [entries[index]!],
     };
   }
@@ -95,8 +105,8 @@ export function buildTodoToolPreview(
     ).length;
     return {
       variant: "plan",
-      header: "Todo plan",
-      meta: [`${completed} completed`, `${entries.length} items`],
+      completed,
+      total: entries.length,
       entries,
     };
   }

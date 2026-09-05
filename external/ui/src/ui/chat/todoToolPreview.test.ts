@@ -17,8 +17,8 @@ test("item update reads its final row from the persisted plan snapshot", () => {
     }),
   ).toEqual({
     variant: "item",
-    header: "Updated item",
-    meta: ["2 of 3"],
+    position: 2,
+    total: 3,
     entries: [plan[1]],
   });
 });
@@ -32,8 +32,8 @@ test("plan replacement preserves item order and reports completed count", () => 
     }),
   ).toEqual({
     variant: "plan",
-    header: "Todo plan",
-    meta: ["1 completed", "3 items"],
+    completed: 1,
+    total: 3,
     entries: plan,
   });
 });

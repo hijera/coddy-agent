@@ -271,8 +271,22 @@ export function buildToolCallPreview(
     return {
       toolName,
       title,
-      header: todoPreview.header,
-      meta: todoPreview.meta,
+      header:
+        todoPreview.variant === "item"
+          ? t("todoPreview.header.item")
+          : t("todoPreview.header.plan"),
+      meta:
+        todoPreview.variant === "item"
+          ? [
+              t("todoPreview.meta.position", {
+                position: todoPreview.position,
+                total: todoPreview.total,
+              }),
+            ]
+          : [
+              tp("todoPreview.meta.completed", todoPreview.completed),
+              tp("todoPreview.meta.items", todoPreview.total),
+            ],
       copyText: "",
       kind: "todo",
       variant: todoPreview.variant,

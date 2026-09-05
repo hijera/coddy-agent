@@ -74,7 +74,7 @@ type Definition struct {
 	Description string
 	// Model is a models[].model id, or empty to inherit the parent's model.
 	Model string
-	// Mode is "agent", "plan", or empty to inherit the parent's mode.
+	// Mode is "agent", "plan", "debug" (fork), or empty to inherit the parent's mode.
 	Mode string
 	// Tools is an allowlist of tool names or prefix* patterns; empty means
 	// everything the parent has.
@@ -156,9 +156,9 @@ func Parse(path string, data []byte) (*Definition, error) {
 
 	mode := strings.ToLower(strings.TrimSpace(meta.Mode))
 	switch mode {
-	case "", "agent", "plan":
+	case "", "agent", "plan", "debug":
 	default:
-		return nil, fmt.Errorf("%s: mode must be agent or plan, got %q", path, meta.Mode)
+		return nil, fmt.Errorf("%s: mode must be agent, plan or debug, got %q", path, meta.Mode)
 	}
 
 	permRaw := strings.TrimSpace(meta.PermissionMode)

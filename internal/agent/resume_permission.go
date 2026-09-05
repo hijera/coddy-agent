@@ -129,6 +129,7 @@ func (a *Agent) buildToolEnv(mode, sessionDir string) *tools.Env {
 		Background:        a.backgroundPool(sessionDir),
 		BackgroundEnabled: a.cfg.Tools.Background.ResolvedEnabled(),
 	}
+	a.applySubagentEnv(env, mode)
 	a.wireFileEditHook(env)
 	return env
 }

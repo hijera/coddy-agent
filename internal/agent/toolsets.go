@@ -51,6 +51,9 @@ var planToolNames = []string{
 	// Read-only: lets the planner pull a catalogued skill's instructions when
 	// skills.auto_discovery is on (the tool is only registered when enabled).
 	"load_skill",
+	// A planner fans out investigation the same way Claude Code's Explore
+	// subagent does; the child of a plan-mode parent is forced into plan mode.
+	"spawn_agent",
 	// Read-only Subversion inspection, mirroring the read-only git commands the
 	// planner can already run through run_command. Registered only when
 	// vcs.svn is enabled and a client is installed; an unregistered name simply
@@ -123,6 +126,20 @@ func ToolSetForMode(mode string, noSelfRun bool) ToolSet {
 
 // askToolSet is the ask allowlist as a ToolSet, built once for the per-call check.
 var askToolSet = ToolSet(askToolNames)
+
+// modeMaySpawn reports whether a turn admitted in mode may delegate to a
+// subagent. The fork has five modes where upstream has three: agent, plan and
+// debug (unrestricted like agent) may spawn; ask and docs are read-only
+// surfaces that delegate nothing, so spawn_agent is neither offered nor
+// honoured there.
+func modeMaySpawn(mode string) bool {
+	switch mode {
+	case "agent", "plan", "debug":
+		return true
+	default:
+		return false
+	}
+}
 
 // ModeAllowsMCPTools reports whether external MCP tools are exposed in a mode.
 // Docs mode keeps a closed, documentation-only mutation surface and ask mode

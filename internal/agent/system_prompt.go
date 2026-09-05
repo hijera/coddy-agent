@@ -89,6 +89,8 @@ func (a *Agent) buildSystemPrompt(mode string, activeSkills []*skills.Skill, too
 		PlanContext:    planCtx,
 		DiscardedPlans: discardedPlans,
 		Instructions:   instructionsMD,
+		Subagents:      a.subagentCatalogBlock(),
+		SubagentRole:   a.subagentRoleBlock(),
 		UTCNow:         time.Now().UTC().Format(time.RFC3339),
 	})
 	// The identity sentence has to fall inside the window a gateway inspects (see

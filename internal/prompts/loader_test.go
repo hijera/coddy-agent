@@ -754,3 +754,44 @@ func TestRenderWithFallbackNoPanic(t *testing.T) {
 		t.Error("RenderWithFallback should return non-empty string even on error")
 	}
 }
+
+// Every spawning mode template renders the subagent role block when a role is
+// set, so a child never loses its preamble because of the mode it runs in.
+// The fork spawns from agent, plan and debug (ask and docs delegate nothing
+// and are never a child's mode).
+func TestEverySpawningModeTemplateRendersTheSubagentRole(t *testing.T) {
+	for _, mode := range []string{"agent", "plan", "debug"} {
+		out, err := prompts.Render(mode, "", defaultAgentTplFile, defaultPlanTplFile, defaultDocsTplFile, defaultAskTplFile, prompts.TemplateData{CWD: "/w", SubagentRole: "You are the unit subagent."})
+		if err != nil {
+			t.Fatalf("%s: %v", mode, err)
+		}
+		if !strings.Contains(out, "## Your role as a subagent") || !strings.Contains(out, "You are the unit subagent.") {
+			t.Fatalf("%s template drops the subagent role block:\n%s", mode, out[:min(len(out), 400)])
+		}
+		plain, err := prompts.Render(mode, "", defaultAgentTplFile, defaultPlanTplFile, defaultDocsTplFile, defaultAskTplFile, prompts.TemplateData{CWD: "/w"})
+		if err != nil {
+			t.Fatalf("%s: %v", mode, err)
+		}
+		if strings.Contains(plain, "Your role as a subagent") {
+			t.Fatalf("%s template renders the role heading without a role", mode)
+		}
+	}
+}
+
+// The subagent catalog block lands in the same spawning modes and nowhere
+// else: a read-only mode never advertises delegation.
+func TestSubagentCatalogRendersOnlyInSpawningModes(t *testing.T) {
+	data := prompts.TemplateData{CWD: "/w", Subagents: "## Subagents\n\ncatalog-marker"}
+	for _, mode := range []string{"agent", "plan", "debug"} {
+		out, err := prompts.Render(mode, "", defaultAgentTplFile, defaultPlanTplFile, defaultDocsTplFile, defaultAskTplFile, data)
+		if err != nil || !strings.Contains(out, "catalog-marker") {
+			t.Fatalf("%s template drops the subagent catalog (err=%v)", mode, err)
+		}
+	}
+	for _, mode := range []string{"ask", "docs"} {
+		out, err := prompts.Render(mode, "", defaultAgentTplFile, defaultPlanTplFile, defaultDocsTplFile, defaultAskTplFile, data)
+		if err != nil || strings.Contains(out, "catalog-marker") {
+			t.Fatalf("%s template must not render the subagent catalog (err=%v)", mode, err)
+		}
+	}
+}

@@ -254,6 +254,9 @@ func newTurnAgent(mgr *session.Manager, app *App, st *session.State, snd acp.Upd
 		}
 		return warnings, err
 	})
+	// The manager owns child sessions, so a console turn may spawn subagents
+	// like an ACP or HTTP turn.
+	loop.SetSubagentRuntime(mgr)
 	return loop
 }
 
@@ -340,6 +343,11 @@ func runInteractive(ctx context.Context, app *App, term *tui.ProcessTerminal, re
 		restored = true
 		if app.turnActive && app.sessionID != "" {
 			app.mgr.HandleSessionCancel(acp.SessionCancelParams{SessionID: app.sessionID})
+			// A remote cancel is a network request; give it a moment to reach
+			// the server before the process disappears.
+			if w, ok := app.mgr.(interface{ WaitCancels(time.Duration) }); ok {
+				w.WaitCancels(5 * time.Second)
+			}
 		}
 		app.Close()
 		app.JoinWorkers(3 * time.Second)

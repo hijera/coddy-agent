@@ -709,7 +709,14 @@ func (m *Manager) HandleSessionPromptWithSender(ctx context.Context, params acp.
 		)
 	}()
 
+	// Ask mode is read-only: the run-plan metadata shortcut is refused, and a
+	// plan mention below stays material to read (HydrateSessionPlanMentions
+	// inlines the document) instead of turning into a run request.
+	askMode := state.GetMode() == string(ModeAsk)
 	if slug := RunPlanSlugFromPromptMeta(params.Meta); slug != "" {
+		if askMode {
+			return nil, fmt.Errorf("plan %q cannot be run in ask mode: switch to agent mode first", slug)
+		}
 		return m.RunPlan(turnCtx, params.SessionID, slug, sender)
 	}
 
@@ -737,7 +744,7 @@ func (m *Manager) HandleSessionPromptWithSender(ctx context.Context, params acp.
 		if err != nil {
 			return nil, err
 		}
-		if mentionSlug := ExtractRunPlanSlugFromPromptText(contentBlocksToPlainText(hydrated)); mentionSlug != "" {
+		if mentionSlug := ExtractRunPlanSlugFromPromptText(contentBlocksToPlainText(hydrated)); mentionSlug != "" && !askMode {
 			return m.RunPlan(turnCtx, params.SessionID, mentionSlug, sender)
 		}
 	}

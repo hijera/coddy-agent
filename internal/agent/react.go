@@ -28,6 +28,7 @@ import (
 	"github.com/hijera/foxxycode-agent/internal/session"
 	"github.com/hijera/foxxycode-agent/internal/skills"
 	"github.com/hijera/foxxycode-agent/internal/tools"
+	"github.com/hijera/foxxycode-agent/internal/tools/todo"
 )
 
 // SessionState is the interface Agent needs from a session.
@@ -1111,6 +1112,11 @@ func (a *Agent) executeToolCall(ctx context.Context, tc llm.ToolCall, env *tools
 // (status cancelled, result carrying the refusal text) share it so the
 // transcript, the tool_calls store, and the preview stay consistent.
 func (a *Agent) finishToolCall(sessionDir, sessionID string, tc llm.ToolCall, result string, execErr error, status string) {
+	var todoPlanSnapshot []acp.PlanEntry
+	if status == "completed" {
+		todoPlanSnapshot = todoPlanSnapshotAfterToolCall(tc.Name, a.state, execErr)
+	}
+
 	if sessionDir != "" && strings.TrimSpace(tc.ID) != "" {
 		finalText := result
 		if execErr != nil {
@@ -1118,6 +1124,9 @@ func (a *Agent) finishToolCall(sessionDir, sessionID string, tc llm.ToolCall, re
 		}
 		_ = session.WriteToolCallResult(sessionDir, tc.ID, finalText)
 		_ = session.MarkToolCallFinished(sessionDir, tc.ID, tc.Name, toolKind(tc.Name), status)
+		if len(todoPlanSnapshot) > 0 {
+			_ = session.WriteToolCallPlanSnapshot(sessionDir, tc.ID, todoPlanSnapshot)
+		}
 	}
 
 	payload := result
@@ -1133,6 +1142,17 @@ func (a *Agent) finishToolCall(sessionDir, sessionID string, tc llm.ToolCall, re
 			{Type: "content", Content: acp.ContentBlock{Type: "text", Text: display}},
 		}
 	}
+	if len(todoPlanSnapshot) > 0 {
+		if previewMeta == nil {
+			previewMeta = map[string]interface{}{}
+		}
+		foxxycodeMeta, _ := previewMeta["foxxycode"].(map[string]interface{})
+		if foxxycodeMeta == nil {
+			foxxycodeMeta = map[string]interface{}{}
+			previewMeta["foxxycode"] = foxxycodeMeta
+		}
+		foxxycodeMeta["todoPlan"] = todoPlanSnapshot
+	}
 
 	_ = a.server.SendSessionUpdate(sessionID, acp.ToolCallStatusUpdate{
 		SessionUpdate: acp.UpdateTypeToolCallUpdate,
@@ -1141,6 +1161,22 @@ func (a *Agent) finishToolCall(sessionDir, sessionID string, tc llm.ToolCall, re
 		Content:       content,
 		Meta:          previewMeta,
 	})
+}
+
+func todoPlanSnapshotAfterToolCall(toolName string, state SessionState, execErr error) []acp.PlanEntry {
+	if execErr != nil || state == nil {
+		return nil
+	}
+	switch toolName {
+	case todo.ToolNameItemUpdate, todo.ToolNamePlanReplace:
+		entries := state.GetPlan()
+		if len(entries) == 0 {
+			return nil
+		}
+		return append([]acp.PlanEntry(nil), entries...)
+	default:
+		return nil
+	}
 }
 
 // currentToolDefinitions builds the definition list for mode, reflecting the

@@ -81,6 +81,7 @@ import {
   upsertQuestionPromptRecord,
 } from "./chat/questionPromptSessionStore";
 import { pickRicherToolArgs } from "./chat/toolCallArgs";
+import { normalizeTodoPlanSnapshot } from "./chat/todoToolPreview";
 import { transcriptHasFilledAssistant } from "./chat/streamSyncLocalAssistant";
 import { stableMemoryCopilotItemId } from "./chat/memoryStableId";
 import type { TokenUsage, TranscriptItem } from "./chat/types";
@@ -265,6 +266,7 @@ type ToolCallListRow = {
   argsPreview?: string;
   resultPreview?: string;
   resultPreviewTruncated?: boolean;
+  planSnapshot?: unknown;
 };
 
 function readMessageCreatedAtUTC(
@@ -2814,6 +2816,8 @@ export function App() {
         if (row.resultPreview) merged.resultText = row.resultPreview;
         if (row.resultPreviewTruncated === true)
           merged.resultWasTruncated = true;
+        const todoPlan = normalizeTodoPlanSnapshot(row.planSnapshot);
+        if (todoPlan !== undefined) merged.todoPlan = todoPlan;
         const st = parseRFC3339ms(row.startedAt);
         const fin = parseRFC3339ms(row.finishedAt);
         if (st != null && fin != null && fin >= st) {
@@ -3313,6 +3317,7 @@ export function App() {
           it.resultWasTruncated = update.resultWasTruncated;
         if (update.fullResultText !== undefined)
           it.fullResultText = update.fullResultText;
+        if (update.todoPlan !== undefined) it.todoPlan = update.todoPlan;
         if (update.startedAtMs !== undefined)
           it.startedAtMs = update.startedAtMs;
         if (update.finishedAtMs !== undefined)
@@ -3350,6 +3355,7 @@ export function App() {
         merged.resultWasTruncated = update.resultWasTruncated;
       if (update.fullResultText !== undefined)
         merged.fullResultText = update.fullResultText;
+      if (update.todoPlan !== undefined) merged.todoPlan = update.todoPlan;
       next[idx] = merged;
       return next;
     });
@@ -4985,7 +4991,12 @@ export function App() {
             const det = await fetchJSON<{
               args?: string;
               result?: string;
-              meta?: { status?: string; kind?: string; name?: string };
+              meta?: {
+                status?: string;
+                kind?: string;
+                name?: string;
+                planSnapshot?: unknown;
+              };
             }>(
               `/foxxycode/sessions/${encodeURIComponent(sessionId)}/tool-calls/${encodeURIComponent(toolCallId)}`,
               { headers },
@@ -4996,6 +5007,8 @@ export function App() {
             if (meta.name) patch.title = meta.name;
             if (meta.kind) patch.kind = meta.kind;
             if (meta.status) patch.status = meta.status;
+            const todoPlan = normalizeTodoPlanSnapshot(meta.planSnapshot);
+            if (todoPlan !== undefined) patch.todoPlan = todoPlan;
             if (det.data.args) patch.argsText = det.data.args;
             if (det.data.result !== undefined)
               patch.fullResultText = det.data.result;

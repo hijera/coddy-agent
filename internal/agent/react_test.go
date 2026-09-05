@@ -18,6 +18,7 @@ import (
 	"github.com/hijera/foxxycode-agent/internal/session"
 	"github.com/hijera/foxxycode-agent/internal/skills"
 	"github.com/hijera/foxxycode-agent/internal/tools"
+	"github.com/hijera/foxxycode-agent/internal/tools/todo"
 )
 
 // --- Shared test doubles ---------------------------------------------------
@@ -1240,3 +1241,81 @@ func TestResumeAfterPermissionInAskModeRefusesAndRecordsNoGrant(t *testing.T) {
 		t.Fatalf("refused call still recorded an allow-always grant: %v", grants)
 	}
 }
+
+type todoSnapshotSender struct {
+	updates []interface{}
+}
+
+func (s *todoSnapshotSender) SendSessionUpdate(_ string, update interface{}) error {
+	s.updates = append(s.updates, update)
+	return nil
+}
+
+func (*todoSnapshotSender) RequestPermission(context.Context, acp.PermissionRequestParams) (*acp.PermissionResult, error) {
+	return &acp.PermissionResult{Outcome: "allow", OptionID: "allow"}, nil
+}
+
+func (*todoSnapshotSender) RequestQuestion(context.Context, acp.QuestionRequestParams) (*acp.QuestionResult, error) {
+	return &acp.QuestionResult{}, nil
+}
+
+func TestTodoItemUpdateSavesAndPublishesFinalPlanSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	st := &session.State{
+		ID:         "sess_todo_snapshot",
+		CWD:        dir,
+		Mode:       session.ModeAgent,
+		SessionDir: dir,
+	}
+	st.SetPlan([]acp.PlanEntry{
+		{Content: "Inspect existing cards", Status: "completed"},
+		{Content: "Render structured preview", Status: "pending"},
+	})
+	sender := &todoSnapshotSender{}
+	ag := NewAgent(&config.Config{}, st, sender, nil)
+
+	_, err := ag.executeToolCall(
+		context.Background(),
+		llm.ToolCall{
+			ID:        "todo-update-1",
+			Name:      todo.ToolNameItemUpdate,
+			InputJSON: `{"index":1,"status":"completed"}`,
+		},
+		ag.buildToolEnv(string(session.ModeAgent), dir),
+		string(session.ModeAgent),
+		st.ID,
+		false,
+		0,
+	)
+	if err != nil {
+		t.Fatalf("executeToolCall: %v", err)
+	}
+
+	meta, err := session.ReadToolCallMeta(dir, "todo-update-1")
+	if err != nil {
+		t.Fatalf("ReadToolCallMeta: %v", err)
+	}
+	if len(meta.PlanSnapshot) != 2 || meta.PlanSnapshot[1].Status != "completed" {
+		t.Fatalf("persisted PlanSnapshot = %+v", meta.PlanSnapshot)
+	}
+
+	st.SetPlan([]acp.PlanEntry{{Content: "Later plan", Status: "pending"}})
+	persisted, err := session.ReadToolCallMeta(dir, "todo-update-1")
+	if err != nil || persisted.PlanSnapshot[1].Content != "Render structured preview" {
+		t.Fatalf("historical plan snapshot changed: meta=%+v err=%v", persisted, err)
+	}
+
+	var completed acp.ToolCallStatusUpdate
+	for _, update := range sender.updates {
+		candidate, ok := update.(acp.ToolCallStatusUpdate)
+		if ok && candidate.Status == "completed" {
+			completed = candidate
+		}
+	}
+	foxxycode, _ := completed.Meta["foxxycode"].(map[string]interface{})
+	sent, _ := foxxycode["todoPlan"].([]acp.PlanEntry)
+	if len(sent) != 2 || sent[1].Status != "completed" {
+		t.Fatalf("SSE todoPlan = %+v", sent)
+	}
+}
+

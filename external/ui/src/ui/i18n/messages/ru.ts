@@ -376,9 +376,18 @@ export const messagesRu: Record<string, string> = {
   "settings.codexAuth.providerNameRequired":
     "Перед входом укажите имя провайдера.",
   "settings.mcp.legend": "Серверы MCP",
+  "settings.neuralDeepApiBase.description":
+    "NeuralDeep держит одно и то же API в двух развёртываниях: api.neuraldeep.ru обслуживает Россию, api.neuraldeep.tech — зеркало для остальных стран. Выбор определяет и хаб, через который идёт вход ниже. Список моделей читается из сохранённого конфига, поэтому сначала сохраните настройки.",
+  "settings.neuralDeepApiBase.optionRu": "api.neuraldeep.ru — Россия",
+  "settings.neuralDeepApiBase.optionTech":
+    "api.neuraldeep.tech — зеркало для остального мира",
+  "settings.neuralDeepApiBase.unknown":
+    "Сохранённый api_base {value} не является эндпоинтом NeuralDeep, поэтому запросы пойдут на {fallback}. Выберите эндпоинт, чтобы заменить его.",
   "settings.neuralDeepAuth.error.signInFailed": "Не удалось войти в NeuralDeep.",
   "settings.neuralDeepAuth.error.incompleteResponse":
     "Хаб вернул неполный ответ входа.",
+  "settings.neuralDeepAuth.hubMismatch":
+    "Этот вход выдан хабом {hub}, а {endpoint} обслуживает другой хаб, поэтому запросы с этим ключом отклоняются. Войдите заново, чтобы получить ключ для этого эндпоинта.",
   "settings.neuralDeepAuth.fieldLabel": "Аккаунт NeuralDeep",
   "settings.neuralDeepAuth.description":
     "Войдите под учёткой хаба NeuralDeep вместо ручной вставки ключа: хаб выдаст персональный ключ для FoxxyCode. Ключ хранится на сервере FoxxyCode и не попадает в config.yaml. Модели тарифа добавьте в разделе Логические модели - пикер моделей подтянет каталог с этим входом.",

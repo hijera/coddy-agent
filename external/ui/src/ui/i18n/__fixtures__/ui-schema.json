@@ -918,7 +918,7 @@
         "additionalProperties": false,
         "properties": {
           "api_base": {
-            "description": "Optional override of the default API base URL for this provider. Ignored for neuraldeep and codex, which use fixed official endpoints.",
+            "description": "Optional override of the default API base URL for this provider. For neuraldeep it selects the deployment - https://api.neuraldeep.ru/v1 (Russia) or https://api.neuraldeep.tech/v1 (the international mirror) - and any other value falls back to the first; ignored for codex, which uses a fixed official endpoint.",
             "title": "API base URL",
             "type": "string"
           },

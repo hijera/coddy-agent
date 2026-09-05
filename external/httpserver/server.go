@@ -55,6 +55,10 @@ type Server struct {
 	// drives lists the machine's drive roots for the folder picker's volume
 	// level (Windows only; empty elsewhere). Tests override.
 	drives func() []string
+	// neuralDeepHubFor maps a neuraldeep api_base to the hub that mints keys
+	// for it (llm.NeuralDeepHubFor). Tests substitute stand-in hubs per
+	// deployment.
+	neuralDeepHubFor func(apiBase string) string
 
 	// projects tracks the current project folder and recent list; nil
 	// degrades the /foxxycode/project endpoints gracefully.
@@ -128,6 +132,7 @@ func New(cfg *config.Config, mgr *session.Manager, log *slog.Logger, defaultCWD 
 		agentProviderFactory: llm.NewProvider,
 		makeLLMFromYAML:      defaultMakeLLMFromYAML,
 		drives:               platform.Drives,
+		neuralDeepHubFor:     llm.NeuralDeepHubFor,
 		slashCache:           make(map[string]slashListCacheEntry),
 		codexAuthIssuer:      llm.CodexIssuerURL,
 		codexAuthLogins:      make(map[string]*codexAuthLoginAttempt),

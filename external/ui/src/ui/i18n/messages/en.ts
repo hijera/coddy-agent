@@ -374,9 +374,18 @@ export const messagesEn: Record<string, string> = {
   "settings.codexAuth.providerNameRequired":
     "Enter a provider name before signing in.",
   "settings.mcp.legend": "MCP servers",
+  "settings.neuralDeepApiBase.description":
+    "NeuralDeep runs the same API at two deployments: api.neuraldeep.ru serves Russia, api.neuraldeep.tech is the mirror for everywhere else. The choice also decides which hub the sign-in below talks to. Fetching the model list reads the saved config, so save before you fetch.",
+  "settings.neuralDeepApiBase.optionRu": "api.neuraldeep.ru — Russia",
+  "settings.neuralDeepApiBase.optionTech":
+    "api.neuraldeep.tech — international mirror",
+  "settings.neuralDeepApiBase.unknown":
+    "The saved api_base {value} is not a NeuralDeep endpoint, so requests go to {fallback}. Pick an endpoint to replace it.",
   "settings.neuralDeepAuth.error.signInFailed": "NeuralDeep sign in failed.",
   "settings.neuralDeepAuth.error.incompleteResponse":
     "The hub returned an incomplete sign-in response.",
+  "settings.neuralDeepAuth.hubMismatch":
+    "This login was issued by {hub}, but {endpoint} is served by a different hub, so requests with it are rejected. Sign in again to get a key for this endpoint.",
   "settings.neuralDeepAuth.fieldLabel": "NeuralDeep account",
   "settings.neuralDeepAuth.description":
     "Sign in with your NeuralDeep hub account instead of pasting a key: the hub issues a personal key for FoxxyCode. The key is stored on the FoxxyCode server and is never added to config.yaml. To use your tier's models, add them under Logical models (the model picker fetches the catalog with this login).",

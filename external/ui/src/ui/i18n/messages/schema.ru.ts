@@ -28,10 +28,8 @@ export const schemaTextRu: Record<string, string> = {
   "Wire protocol for this provider entry.":
     "Протокол обмена для этой записи провайдера.",
   "API base URL": "Базовый URL API",
-  "Optional override of the default API base URL for this provider. Ignored for neuraldeep, which always uses https://api.neuraldeep.ru/v1.":
-    "Необязательная замена базового URL API по умолчанию для этого провайдера. Игнорируется для neuraldeep — он всегда использует https://api.neuraldeep.ru/v1.",
-  "Optional override of the default API base URL for this provider. Ignored for neuraldeep and codex, which use fixed official endpoints.":
-    "Необязательная замена базового URL API. Игнорируется для neuraldeep и codex: они используют фиксированные официальные адреса.",
+  "Optional override of the default API base URL for this provider. For neuraldeep it selects the deployment - https://api.neuraldeep.ru/v1 (Russia) or https://api.neuraldeep.tech/v1 (the international mirror) - and any other value falls back to the first; ignored for codex, which uses a fixed official endpoint.":
+    "Необязательная замена базового URL API. Для neuraldeep выбирает площадку — https://api.neuraldeep.ru/v1 (Россия) или https://api.neuraldeep.tech/v1 (международное зеркало); любое другое значение откатывается к первой. Игнорируется для codex: он использует фиксированный официальный адрес.",
   "API key": "API-ключ",
   "You may set a literal key, reference ${ENV} in YAML (expanded when the file is loaded), or leave empty so the process reads the conventional NAME_API_KEY variable derived from the provider name (see provider name description).":
     "Можно задать ключ напрямую, сослаться на ${ENV} в YAML (подставляется при загрузке файла) или оставить пустым — тогда процесс прочитает стандартную переменную NAME_API_KEY, производную от имени провайдера (см. описание имени провайдера).",

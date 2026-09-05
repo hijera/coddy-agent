@@ -49,15 +49,19 @@ providers:
   #   api_base: "https://api.deepseek.com/v1"
   #   api_key: "${DEEPSEEK_API_KEY}"
 
-  # NeuralDeep hub: OpenAI-compatible with a fixed endpoint, so api_base is
-  # neither needed nor honoured (requests always go to https://api.neuraldeep.ru/v1).
+  # NeuralDeep serves the same OpenAI-compatible API from two deployments:
+  # https://api.neuraldeep.ru/v1 (Russia, used when api_base is empty) and
+  # https://api.neuraldeep.tech/v1 (the mirror for everywhere else). api_base
+  # picks one - any other value falls back to the first - and the choice also
+  # decides which hub signs you in.
   # Instead of pasting a key, sign in with your hub account: `foxxycode providers
-  # login neuraldeep` (browser flow; --device for headless) or Sign In with
-  # NeuralDeep in the bundled web UI. The key lands under
-  # $FOXXYCODE_HOME/providers/<name>/neuraldeep-auth.json; an explicit api_key,
-  # api_key_command, or NEURALDEEP_API_KEY env var still wins when set.
+  # login neuraldeep` (browser flow; --device for headless, --api-base to pick
+  # the deployment) or Sign In with NeuralDeep in the bundled web UI. The key
+  # lands under $FOXXYCODE_HOME/providers/<name>/neuraldeep-auth.json; an explicit
+  # api_key, api_key_command, or NEURALDEEP_API_KEY env var still wins when set.
   # - name: neuraldeep
   #   type: neuraldeep
+  #   # api_base: "https://api.neuraldeep.tech/v1"  # outside Russia
   #   api_key: "${NEURALDEEP_API_KEY}"
 
   # Codex ChatGPT OAuth. In the bundled web UI, add/select this provider and use

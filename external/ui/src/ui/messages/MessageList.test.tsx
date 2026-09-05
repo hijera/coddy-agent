@@ -1,8 +1,11 @@
 import React from "react";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { MessageList } from "./MessageList";
 import type { TranscriptItem } from "../chat/types";
+import { stripFoxxyCodeAttachmentsForUserDisplay } from "../skills/stripFoxxyCodeAttachments";
+
+vi.mock("../skills/stripFoxxyCodeAttachments", { spy: true });
 
 afterEach(() => cleanup());
 
@@ -169,4 +172,27 @@ test("tool call message uses thinking-row wrapper next to thinking row", () => {
 
   // Tool and thinking are sibling foldout rows (same stack rhythm as messages-inner gap).
   expect(wrapper?.nextElementSibling).toHaveClass("thinking-row");
+});
+
+test("untouched memoized rows skip re-render when another item streams", () => {
+  const onEdit = vi.fn();
+  const items: TranscriptItem[] = [
+    { id: "u1", type: "user_message", content: "Hello" },
+    { id: "a1", type: "assistant_message", content: "strea", streaming: true },
+  ];
+  const { rerender } = render(<MessageList items={items} onEdit={onEdit} />);
+  const userRenders = vi.mocked(stripFoxxyCodeAttachmentsForUserDisplay).mock.calls
+    .length;
+  expect(userRenders).toBeGreaterThan(0);
+
+  // Streaming delta: only the assistant item gets a new object reference.
+  const next: TranscriptItem[] = [
+    items[0]!,
+    { id: "a1", type: "assistant_message", content: "streaming", streaming: true },
+  ];
+  rerender(<MessageList items={next} onEdit={onEdit} />);
+  expect(
+    vi.mocked(stripFoxxyCodeAttachmentsForUserDisplay).mock.calls.length,
+  ).toBe(userRenders);
+  expect(screen.getByText("streaming")).toBeInTheDocument();
 });

@@ -150,7 +150,7 @@ export function MessageList(props: {
               {...(it.createdAtUtc ? { createdAtUtc: it.createdAtUtc } : {})}
               {...(props.knownSkillNames ? { knownSkillNames: props.knownSkillNames } : {})}
               {...(props.onEdit
-                ? { onEdit: (c) => props.onEdit!(c, myIdx) }
+                ? { onEdit: props.onEdit, userMsgIndex: myIdx }
                 : {})}
               {...(it.files && it.files.length > 0 ? { files: it.files } : {})}
             />
@@ -321,19 +321,18 @@ export function MessageList(props: {
             </div>
           );
         }
+        const rowBackgroundTask = props.backgroundTasksByToolCallId?.get(
+          it.toolCallId,
+        );
         return (
           <ToolCallMessage
             key={it.id}
             toolCallId={it.toolCallId}
             status={it.status}
-            {...(props.backgroundTasksByToolCallId?.get(it.toolCallId)
-              ? {
-                  backgroundTask: props.backgroundTasksByToolCallId.get(
-                    it.toolCallId,
-                  ) as BackgroundTask,
-                }
+            {...(rowBackgroundTask
+              ? { backgroundTask: rowBackgroundTask }
               : {})}
-            {...(props.backgroundNowMs !== undefined
+            {...(rowBackgroundTask && props.backgroundNowMs !== undefined
               ? { backgroundNowMs: props.backgroundNowMs }
               : {})}
             {...(props.onOpenBackgroundTask

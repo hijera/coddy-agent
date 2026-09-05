@@ -227,6 +227,7 @@ export const messagesEn: Record<string, string> = {
   "settings.sectionDesc.agent": "ReAct agent defaults",
   "settings.sectionDesc.autocomplete": "Inline code suggestions",
   "settings.sectionDesc.tools": "Tool permissions & limits",
+  "settings.sectionDesc.subagents": "Child agents & delegation",
   "settings.sectionDesc.mcp_servers": "External MCP tools",
   "settings.sectionDesc.skills": "Installed slash skills",
   "settings.sectionDesc.memory": "Long-term memory options",

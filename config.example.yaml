@@ -290,6 +290,25 @@ tools:
   # VS Code plugins pass -plan-no-self-run, so their panels are guarded by default.
   # plan_no_self_run: false
 
+# Subagents: child agents the model can delegate to with spawn_agent. A definition is a
+# markdown file with YAML frontmatter (name, description, model, mode, tools,
+# permission_mode, ...) whose body is the child's role; each run is a background task of
+# the parent session with its own child session and transcript. Definitions found inside
+# the workspace travel with the checkout, so "ask" refuses to spawn one until you approve
+# that file for that workspace on the machine running foxxycode (`foxxycode agents trust <name>`
+# there, or `POST /foxxycode/subagents/{name}/trust`). See docs/subagents.md.
+# subagents:
+#   enabled: true
+#   dirs:
+#     - "${FOXXYCODE_HOME}/agents"       # your own definitions (user scope)
+#     - "${CWD}/.claude/agents"      # project scope, Claude Code compatible
+#     - "${CWD}/.foxxycode/agents"       # project scope
+#   project_trust: ask              # ask | allow | deny
+#   max_concurrent: 4               # subagent runs in flight across the whole process
+#   max_depth: 1                    # 1 = children cannot spawn further; 0 = nobody spawns
+#   default_timeout_seconds: 1800   # hard limit when the definition and the call give none
+#   max_turns: 0                    # 0 follows agent.max_turns
+
 # OpenAI-compatible HTTP API (only when built with: go build -tags=http). Embedded SPA from GET / adds -tags=ui with http. See docs/http-api.md
 # Optional bearer auth + CORS + remote environment selector: see docs/remote-control.md.
 # httpserver:

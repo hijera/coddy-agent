@@ -20,6 +20,7 @@ type ConfigJSON struct {
 	MCPServers   []MCPServerJSON  `json:"mcp_servers,omitempty"`
 	MCP          MCPJSON          `json:"mcp,omitempty"`
 	Tools        ToolsJSON        `json:"tools,omitempty"`
+	Subagents    SubagentsJSON    `json:"subagents,omitempty"`
 	Logger       LoggerJSON       `json:"logger,omitempty"`
 	Sessions     SessionsJSON     `json:"sessions,omitempty"`
 	Memory       MemoryJSON       `json:"memory,omitempty"`
@@ -344,6 +345,17 @@ type HTTPRemoteJSON struct {
 	URL  string `json:"url"`
 }
 
+// SubagentsJSON mirrors Subagents.
+type SubagentsJSON struct {
+	Enabled               *bool    `json:"enabled,omitempty"`
+	Dirs                  []string `json:"dirs,omitempty"`
+	ProjectTrust          string   `json:"project_trust,omitempty"`
+	MaxConcurrent         int      `json:"max_concurrent,omitempty"`
+	MaxDepth              *int     `json:"max_depth,omitempty"`
+	DefaultTimeoutSeconds int      `json:"default_timeout_seconds,omitempty"`
+	MaxTurns              int      `json:"max_turns,omitempty"`
+}
+
 // SchedulerJSON mirrors SchedulerConfig.
 type SchedulerJSON struct {
 	Enabled        bool   `json:"enabled,omitempty"`
@@ -490,6 +502,15 @@ func ConfigToJSONDTO(c *Config) *ConfigJSON {
 		Enabled: c.Scheduler.Enabled, Dir: c.Scheduler.Dir, MaxQueue: c.Scheduler.MaxQueue,
 		Timeout: c.Scheduler.Timeout, RetainSessions: c.Scheduler.RetainSessions,
 	}
+	out.Subagents = SubagentsJSON{
+		Enabled:               cloneBoolPtr(c.Subagents.Enabled),
+		Dirs:                  append([]string(nil), c.Subagents.Dirs...),
+		ProjectTrust:          c.Subagents.ProjectTrust,
+		MaxConcurrent:         c.Subagents.MaxConcurrent,
+		MaxDepth:              cloneIntPtr(c.Subagents.MaxDepth),
+		DefaultTimeoutSeconds: c.Subagents.DefaultTimeoutSeconds,
+		MaxTurns:              c.Subagents.MaxTurns,
+	}
 	tg := c.Gateways.Telegram
 	tgJSON := TelegramGatewayJSON{
 		Enabled: tg.Enabled, Token: tg.Token, Proxy: tg.Proxy, RichMessages: tg.RichMessages,
@@ -526,6 +547,16 @@ func ConfigToJSONDTO(c *Config) *ConfigJSON {
 // cloneBoolPtr copies a *bool so a DTO never shares a pointer with the live
 // config (nil stays nil).
 func cloneBoolPtr(p *bool) *bool {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
+}
+
+// cloneIntPtr copies a *int so a DTO never shares a pointer with the live
+// config (nil stays nil).
+func cloneIntPtr(p *int) *int {
 	if p == nil {
 		return nil
 	}
@@ -678,6 +709,15 @@ func JSONDTOToConfig(j *ConfigJSON, paths Paths) *Config {
 	cfg.Scheduler = SchedulerConfig{
 		Enabled: j.Scheduler.Enabled, Dir: j.Scheduler.Dir, MaxQueue: j.Scheduler.MaxQueue,
 		Timeout: j.Scheduler.Timeout, RetainSessions: j.Scheduler.RetainSessions,
+	}
+	cfg.Subagents = Subagents{
+		Enabled:               cloneBoolPtr(j.Subagents.Enabled),
+		Dirs:                  append([]string(nil), j.Subagents.Dirs...),
+		ProjectTrust:          j.Subagents.ProjectTrust,
+		MaxConcurrent:         j.Subagents.MaxConcurrent,
+		MaxDepth:              cloneIntPtr(j.Subagents.MaxDepth),
+		DefaultTimeoutSeconds: j.Subagents.DefaultTimeoutSeconds,
+		MaxTurns:              j.Subagents.MaxTurns,
 	}
 	jt := j.Gateways.Telegram
 	tg := TelegramGatewayConfig{

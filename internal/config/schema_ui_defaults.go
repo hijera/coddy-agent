@@ -9,6 +9,8 @@ func SchemaExampleConfigJSON() *ConfigJSON {
 	compactionKeepRecent := CompactionDefaultKeepRecentTurns
 	skillsAutoDiscovery := true
 	planNoSelfRun := false
+	subagentsEnabled := true
+	subagentsMaxDepth := SubagentsDefaultMaxDepth
 	titleEnabled := true
 	autocompleteEnabled := false
 	autocompleteMultiLine := true
@@ -85,6 +87,15 @@ func SchemaExampleConfigJSON() *ConfigJSON {
 			PermissionMode:          PermModeAsk,
 			CommandAllowlist:        nil,
 			PlanNoSelfRun:           &planNoSelfRun,
+		},
+		Subagents: SubagentsJSON{
+			Enabled:               &subagentsEnabled,
+			Dirs:                  DefaultSubagentDirs(),
+			ProjectTrust:          SubagentsProjectTrustAsk,
+			MaxConcurrent:         SubagentsDefaultMaxConcurrent,
+			MaxDepth:              &subagentsMaxDepth,
+			DefaultTimeoutSeconds: SubagentsDefaultTimeoutSeconds,
+			MaxTurns:              0,
 		},
 		Logger: LoggerJSON{
 			Level:    LogLevelInfo,
